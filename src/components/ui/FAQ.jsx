@@ -10,14 +10,14 @@ const FAQ = ({ questions, className = '' }) => {
   };
 
   return (
-    <div className={`space-y-4 ${className}`}>
+    <div className={`space-y-4  ${className}`}>
       {questions.map((item, index) => (
-        <Card key={index} className="p-0 overflow-hidden">
+        <div key={index} className="pt-4 border-t-1  overflow-hidden">
           <button
-            className="w-full px-6 py-4 text-left flex items-center justify-between hover:bg-gray-50 transition-colors"
+            className="w-full text-left flex items-center justify-between transition-colors"
             onClick={() => toggleFAQ(index)}
           >
-            <span className="font-medium text-gray-900">
+            <span className="font-semibold text-gray-900">
               {typeof item === 'string' ? item : item.question}
             </span>
             <Plus 
@@ -28,7 +28,7 @@ const FAQ = ({ questions, className = '' }) => {
             />
           </button>
           {expandedFAQ === index && (
-            <div className="px-6 pb-4 text-gray-600">
+            <div className="px-6 pt-2 text-gray-600">
               <p>
                 {typeof item === 'string' 
                   ? 'This is the answer content for the FAQ. You can add the actual content here.'
@@ -37,7 +37,7 @@ const FAQ = ({ questions, className = '' }) => {
               </p>
             </div>
           )}
-        </Card>
+        </div>
       ))}
     </div>
   );

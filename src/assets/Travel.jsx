@@ -1,6 +1,6 @@
 import React from 'react';
 
-const TravelIcon = ({ size = 25, className = 'text-white' }) => {
+const Travel = ({ size = 25, className = 'text-white' }) => {
   return (
     <svg
       width="332"
@@ -40,4 +40,4 @@ const TravelIcon = ({ size = 25, className = 'text-white' }) => {
   );
 };
 
-export default TravelIcon;
+export default Travel;

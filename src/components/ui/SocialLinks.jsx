@@ -1,5 +1,7 @@
 import React from 'react';
-import { Facebook, Instagram, Twitter } from 'lucide-react';
+import InstagramIcon from '../../assets/icons/InstagramIcon';
+import FacebookIcon from '../../assets/icons/FacebookIcon';
+import TwitterIcon from '../../assets/icons/TwitterIcon'
 
 const SocialLinks = ({ 
   variant = 'dark', 
@@ -7,7 +9,7 @@ const SocialLinks = ({
   className = ''
 }) => {
   const variants = {
-    light: 'bg-white/20 hover:bg-white/30 text-white',
+    light: '',
     dark: 'bg-gray-200 hover:bg-gray-300 text-gray-700'
   };
 
@@ -24,9 +26,9 @@ const SocialLinks = ({
   };
 
   const socialIcons = [
-    { name: 'facebook', icon: Facebook, url: '#' },
-    { name: 'instagram', icon: Instagram, url: '#' },
-    { name: 'twitter', icon: Twitter, url: '#' }
+    { name: 'facebook', icon: FacebookIcon, url: '#' },
+    { name: 'instagram', icon: InstagramIcon, url: '#' },
+    { name: 'twitter', icon: TwitterIcon, url: '#' }
   ];
 
   return (
@@ -44,7 +46,6 @@ const SocialLinks = ({
             justify-center 
             transition-all 
             duration-200
-            hover:scale-110
             transform
           `}
           aria-label={`Follow us on ${name}`}
