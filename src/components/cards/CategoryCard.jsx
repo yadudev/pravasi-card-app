@@ -1,8 +1,8 @@
 import React from 'react';
-import ShoppingIcon from '../../assets/icons/ShoppingIcon';
-import HealthcareIcon from '../../assets/icons/HealthcareIcon';
-import TravelIcon from '../../assets/icons/TravelIcon';
-import DiningIcon from '../../assets/icons/DiningIcon';
+import Shopping from '../../assets/Shopping';
+import Healthcare from '../../assets/Healthcare';
+import Travel from '../../assets/Travel';
+import Dining from '../../assets/Dining';
 
 const CategoryCard = ({
   category,
@@ -11,10 +11,10 @@ const CategoryCard = ({
   isActive = false,
 }) => {
   const iconComponents = {
-    Shopping: ShoppingIcon,
-    Healthcare: HealthcareIcon,
-    Travel: TravelIcon,
-    Dining: DiningIcon,
+    Shopping: Shopping,
+    Healthcare: Healthcare,
+    Travel: Travel,
+    Dining: Dining,
   };
 
   const IconComponent = iconComponents[category.iconName];

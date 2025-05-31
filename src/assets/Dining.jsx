@@ -1,6 +1,6 @@
 import React from 'react';
 
-const DiningIcon = ({ size = 25, className = 'text-white' }) => {
+const Dining = ({ size = 25, className = 'text-white' }) => {
   return (
     <svg
       width="332"
@@ -56,4 +56,4 @@ const DiningIcon = ({ size = 25, className = 'text-white' }) => {
   );
 };
 
-export default DiningIcon;
+export default Dining;

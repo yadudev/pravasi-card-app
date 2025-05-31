@@ -1,6 +1,6 @@
 import React from 'react';
 
-const HealthcareIcon = ({ size = 25, className = 'text-white' }) => {
+const Healthcare = ({ size = 25, className = 'text-white' }) => {
   return (
     <svg
       width="332"
@@ -41,4 +41,4 @@ const HealthcareIcon = ({ size = 25, className = 'text-white' }) => {
   );
 };
 
-export default HealthcareIcon;
+export default Healthcare;

@@ -1,4 +1,4 @@
-const ShoppingIcon = ({ size = 25, className = 'text-white' }) => {
+const Shopping = ({ size = 25, className = 'text-white' }) => {
   return (
     <svg
       width="332"
@@ -49,4 +49,4 @@ const ShoppingIcon = ({ size = 25, className = 'text-white' }) => {
   );
 };
 
-export default ShoppingIcon;
+export default Shopping;

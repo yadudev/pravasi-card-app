@@ -1,26 +1,14 @@
-// Fixed HomePage.jsx with working navigation
 import React, { useState } from 'react';
-import {
-  ShoppingBag,
-  Clock,
-  MapPin,
-  Link,
-  ArrowUpRight,
-  ArrowLeft,
-  ArrowRight,
-} from 'lucide-react';
+import { Clock, ArrowUpRight, ArrowLeft, ArrowRight } from 'lucide-react';
 
-// Import reusable components
-import Button from '../components/ui/Button';
-import Card from '../components/ui/Card';
-import Input from '../components/ui/Input';
-import Header from '../components/layout/Header';
 import CategoryCard from '../components/cards/CategoryCard';
 import LoyaltyCard from '../components/cards/LoyaltyCard';
 import FeatureCard from '../components/cards/FeatureCard';
 import StepIndicator from '../components/ui/StepIndicator';
 import FAQ from '../components/ui/FAQ';
-import SocialLinks from '../components/ui/SocialLinks';
+import BagBroken from '../assets/icons/BagBroken';
+import EarthBroken from '../assets/icons/EarthBroken';
+import KeyBroken from '../assets/icons/KeyBroken';
 
 const HomePage = () => {
   const [activeCategory, setActiveCategory] = useState(0);
@@ -33,31 +21,21 @@ const HomePage = () => {
     { name: 'Dining', iconName: 'Dining', color: 'bg-blue-700' },
   ];
 
-  // Navigation functions with debug logging
   const nextCategory = () => {
-    console.log('Next button clicked. Current activeCategory:', activeCategory);
     setActiveCategory((prev) => {
       const newIndex = (prev + 1) % categories.length;
-      console.log('Setting activeCategory to:', newIndex);
       return newIndex;
     });
   };
 
   const prevCategory = () => {
-    console.log(
-      'Previous button clicked. Current activeCategory:',
-      activeCategory
-    );
     setActiveCategory((prev) => {
       const newIndex = (prev - 1 + categories.length) % categories.length;
-      console.log('Setting activeCategory to:', newIndex);
       return newIndex;
     });
   };
 
-  // Test function to verify state changes
   const handleCategoryClick = (index) => {
-    console.log('Category clicked:', index);
     setActiveCategory(index);
   };
 
@@ -84,7 +62,7 @@ const HomePage = () => {
 
   const features = [
     {
-      icon: ShoppingBag,
+      icon: BagBroken,
       title: 'Discounts in All the Right Places',
       description:
         "Whether you're visiting family, dining out, shopping for gifts, or looking for personal care services — our cards unlock special rates at top-rated restaurants, retail outlets, beauty salons, wellness centers, grocery stores, and much more.",
@@ -96,13 +74,13 @@ const HomePage = () => {
         "We believe in giving you the best when it matters the most. Every card comes with exclusive discounts that are valid for a limited time creating urgency but also ensuring freshness and genuine value. Activate when you're ready and use it before it expires.",
     },
     {
-      icon: MapPin,
+      icon: EarthBroken,
       title: 'Personalized Offers Based on Your Location & Needs',
       description:
         "Once you select a category (like food, shopping, or wellness), our platform shows you the most relevant offers near you. This way, you only see discounts that you'll actually use tailored for where you are and what you love.",
     },
     {
-      icon: Link,
+      icon: KeyBroken,
       title: 'Verified Cards & Secure Access Process',
       description:
         "We believe in giving you the best when it matters the most. Every card comes with exclusive discounts that are valid for a limited time creating urgency but also ensuring freshness and genuine value. Activate when you're ready and use it before it expires.",
@@ -138,7 +116,7 @@ const HomePage = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-white">
       {/* Hero Section */}
       <div className="px-6 ml-4 py-8">
         <section className="bg-[#7AC3FB] py-24 px-6 relative overflow-hidden rounded-3xl">
@@ -203,9 +181,8 @@ const HomePage = () => {
           </div>
         </section>
       </div>
-
       {/* Categories Section */}
-      <section className="py-16 px-6 ml-4 bg-gray-50 font-figtree">
+      <section className="py-16 px-6 ml-4 font-figtree">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between mb-8">
             <div>
@@ -257,11 +234,18 @@ const HomePage = () => {
           </div>
         </div>
       </section>
-
       {/* How It Works Section */}
-      <section className="py-16 px-6 bg-white">
+      <section className="py-16 px-6 ml-4  font-figtree">
         <div className="max-w-7xl mx-auto text-center">
-          <h2 className="text-3xl md:text-4xl font-bold mb-16 text-blue-400">
+          <h2
+            className="text-3xl md:text-4xl font-bold mb-16 text-transparent bg-clip-text"
+            style={{
+              backgroundImage:
+                'linear-gradient(271.09deg, #222158 2.79%, #AFDCFF 106.22%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+            }}
+          >
             How It Works
           </h2>
 
@@ -272,129 +256,85 @@ const HomePage = () => {
           />
         </div>
       </section>
-
       {/* Why Choose Section */}
-      <section className="py-16 px-6 bg-gradient-to-br from-indigo-900 via-indigo-800 to-blue-900 text-white relative overflow-hidden">
-        {/* Decorative card elements */}
-        <div className="absolute top-0 right-0 transform rotate-12 opacity-20">
-          <Card className="w-48 h-32 bg-white/10" />
-        </div>
-        <div className="absolute bottom-0 left-0 transform -rotate-12 opacity-20">
-          <Card className="w-48 h-32 bg-white/10" />
-        </div>
-
-        <div className="max-w-7xl mx-auto relative z-10">
-          <h2 className="text-3xl md:text-4xl font-bold mb-16 text-center">
-            Why Choose Pravasi Privilege Card?
-          </h2>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {features.map((feature, index) => (
-              <FeatureCard
-                key={index}
-                icon={feature.icon}
-                title={feature.title}
-                description={feature.description}
-                variant="dark"
-              />
-            ))}
+      <div className="px-6 ml-4 mt-12 py-8">
+        <section
+          className="py-16 px-6 text-white relative rounded-3xl font-figtree"
+          style={{
+            background:
+              'linear-gradient(181.2deg, #222158 1.03%, #0066B5 248.15%)',
+          }}
+        >
+          {/* Decorative card elements */}
+          <div className="absolute -top-38 -right-20 transform -rotate-28 z-50 scale-50">
+            <LoyaltyCard
+              className="rounded-xl [box-shadow:-4px_-4px_10px_rgba(0,0,0,0.1),4px_-4px_10px_rgba(0,0,0,0.1)]"
+              showAnimation={false}
+            />
           </div>
-        </div>
-      </section>
-
-      {/* FAQ Section */}
-      <section className="py-16 px-6 bg-gray-50">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16">
-            {/* Left side - FAQ Title */}
-            <div>
-              <h2 className="text-4xl md:text-5xl font-bold text-blue-400 mb-6">
-                FAQs
-              </h2>
-              <p className="text-gray-600 text-lg leading-relaxed">
-                Here's what most users want to know before getting started.
-              </p>
-            </div>
-
-            {/* Right side - FAQ Items */}
-            <div>
-              <FAQ questions={faqData} />
-            </div>
+          <div className="absolute -bottom-48 -left-26 transform rotate-32 scale-50">
+            <LoyaltyCard
+              className="w-72 rounded-xl [box-shadow:-4px_4px_10px_rgba(0,0,0,0.1),4px_4px_10px_rgba(0,0,0,0.1)]"
+              showAnimation={false}
+            />
           </div>
-        </div>
-      </section>
+          <div className="max-w-5xl mx-auto relative z-10">
+            <h2
+              className="text-3xl md:text-4xl font-bold mb-16 text-transparent bg-clip-text"
+              style={{
+                backgroundImage:
+                  'linear-gradient(271.09deg, #222158 2.79%, #AFDCFF 106.22%)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+              }}
+            >
+              Why Choose Pravasi Privilege Card?
+            </h2>
 
-      {/* Footer/Contact Section */}
-      <footer className="bg-gradient-to-br from-indigo-900 via-indigo-800 to-blue-900 text-white py-16 px-6">
-        <div className="max-w-7xl mx-auto">
-          {/* Top Navigation */}
-          <div className="mb-12">
-            <nav className="flex flex-wrap gap-8 text-white/80">
-              <a href="#" className="hover:text-white transition-colors">
-                Home
-              </a>
-              <a href="#" className="hover:text-white transition-colors">
-                Categories
-              </a>
-              <a href="#" className="hover:text-white transition-colors">
-                Apply for Card
-              </a>
-              <a href="#" className="hover:text-white transition-colors">
-                FAQ
-              </a>
-            </nav>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-            {/* Left side - Contact Info */}
-            <div>
-              <h2 className="text-3xl md:text-4xl font-bold mb-4">
-                Let's talk
-              </h2>
-              <p className="text-xl text-white/90 mb-8">
-                Ask us anything on Pravasi Privilege...
-              </p>
-
-              <div className="mb-8">
-                <h3 className="text-lg font-semibold mb-4">Follow us:</h3>
-                <SocialLinks variant="light" />
-              </div>
-            </div>
-
-            {/* Right side - Contact Form */}
-            <Card className="p-8">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h3 className="text-2xl font-bold text-gray-900 mb-2">
-                    Contact Us
-                  </h3>
-                  <p className="text-gray-600">
-                    Have questions or need assistance? We're here to help.
-                  </p>
-                </div>
-                <div className="text-blue-700 font-bold text-lg">PRAVASI</div>
-              </div>
-
-              <form className="space-y-6">
-                <Input
-                  label="Email ID"
-                  placeholder="Enter your email address"
-                  type="email"
-                  required
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {features.map((feature, index) => (
+                <FeatureCard
+                  key={index}
+                  icon={feature.icon}
+                  title={feature.title}
+                  description={feature.description}
+                  variant="default"
                 />
-
-                <Button
-                  variant="primary"
-                  size="lg"
-                  className="w-full bg-indigo-900 hover:bg-indigo-800"
-                >
-                  Subscribe
-                </Button>
-              </form>
-            </Card>
+              ))}
+            </div>
           </div>
-        </div>
-      </footer>
+        </section>
+      </div>
+      {/* FAQ Section */}
+      <div className="px-6 ml-4 mt-24 py-8">
+        <section className="py-16 px-6 bg-white font-figtree">
+          <div className="max-w-7xl mx-auto">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              {/* Left side - FAQ Title */}
+              <div className="max-w-sm">
+                <h2
+                  className="text-4xl md:text-5xl font-bold text-blue-400 mb-6"
+                  style={{
+                    backgroundImage:
+                      'linear-gradient(271.09deg, #222158 2.79%, #AFDCFF 106.22%)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                  }}
+                >
+                  FAGs
+                </h2>
+                <p className="text-[#707070] text-lg leading-relaxed">
+                  Here's what most users want to know before getting started.
+                </p>
+              </div>
+              {/* Right side - FAQ Items */}
+              <div className="w-full">
+                <FAQ questions={faqData} />
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
     </div>
   );
 };

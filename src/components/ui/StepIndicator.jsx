@@ -8,35 +8,42 @@ const StepIndicator = ({
 }) => {
   return (
     <div className={`
-      flex 
-      ${orientation === 'horizontal' ? 'flex-col md:flex-row items-center justify-center space-y-8 md:space-y-0 md:space-x-8' : 'flex-col space-y-8'}
       ${className}
     `}>
-      {steps.map((step, index) => (
-        <div key={step.step} className="flex flex-col items-center max-w-sm relative">
-          {/* Step Circle */}
-          <div className={`
-            w-20 h-20 rounded-full flex items-center justify-center text-3xl font-bold mb-6
-            ${index + 1 <= currentStep 
-              ? 'bg-indigo-900 text-white' 
-              : 'bg-gray-200 text-gray-500'
-            }
-          `}>
-            {step.step}
+      {/* Circles and Lines Row */}
+      <div className="flex items-center justify-center mb-12">
+        {steps.map((step, index) => (
+          <React.Fragment key={step.step}>
+            {/* Step Circle */}
+            <div className={`
+              w-20 h-20 rounded-full flex items-center justify-center text-3xl font-bold
+              ${index + 1 <= currentStep 
+                ? 'bg-[#222158] border-[#AFDCFF99] border-2 border-solid text-white' 
+                : 'bg-gray-200 text-gray-500'
+              }
+            `}>
+              {step.step}
+            </div>
+
+            {/* Connecting Line between circles */}
+            {index < steps.length - 1 && (
+              <div className="w-24 lg:w-32 xl:w-48 border-t-2 border-dotted border-[#222158] mx-4"></div>
+            )}
+          </React.Fragment>
+        ))}
+      </div>
+
+      {/* Content Row */}
+      <div className="flex justify-center items-start">
+        {steps.map((step, index) => (
+          <div key={`content-${step.step}`} className="w-74 px-6">
+            <div className="text-center">
+              <h3 className="text-xl font-semibold mb-4 text-gray-900">{step.title}</h3>
+              <p className="text-[#707070] leading-relaxed text-sm">{step.description}</p>
+            </div>
           </div>
-          
-          {/* Connecting Line (only for horizontal and not last item) */}
-          {orientation === 'horizontal' && index < steps.length - 1 && (
-            <div className="hidden md:block absolute top-10 left-full w-32 border-t-2 border-dotted border-gray-300 z-0"></div>
-          )}
-          
-          {/* Step Content */}
-          <div className="text-center">
-            <h3 className="text-xl font-bold mb-4">{step.title}</h3>
-            <p className="text-gray-600 leading-relaxed">{step.description}</p>
-          </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 };
