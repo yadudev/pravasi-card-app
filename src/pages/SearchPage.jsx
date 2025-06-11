@@ -1,21 +1,30 @@
 import React, { useState } from 'react';
-import { Clock, ArrowUpRight, ArrowLeft, ArrowRight } from 'lucide-react';
-
-import CategoryCard from '../components/cards/CategoryCard';
-import LoyaltyCard from '../components/cards/LoyaltyCard';
-import FeatureCard from '../components/cards/FeatureCard';
-import StepIndicator from '../components/ui/StepIndicator';
-import FAQ from '../components/ui/FAQ';
+import {
+  Search,
+  MapPin,
+  ArrowUpRight,
+  Clock,
+  ArrowLeft,
+  ArrowRight,
+} from 'lucide-react';
+import CategoryIcon from '../assets/icons/CategoryIcon';
 import BagBroken from '../assets/icons/BagBroken';
 import EarthBroken from '../assets/icons/EarthBroken';
 import KeyBroken from '../assets/icons/KeyBroken';
-import ShopRegistrationModal from '../components/ShopRegistrationModal';
+import CategoryCard from '../components/cards/CategoryCard';
+import StepIndicator from '../components/ui/StepIndicator';
+import LoyaltyCard from '../components/cards/LoyaltyCard';
+import FeatureCard from '../components/cards/FeatureCard';
+import FAQ from '../components/ui/FAQ';
+import OTPModal from '../components/OtpModal';
 
-const HomePage = () => {
+const SearchPage = () => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedLocation, setSelectedLocation] = useState('');
   const [activeCategory, setActiveCategory] = useState(0);
-  const [currentPage, setCurrentPage] = useState(0);
-  const [isShopModalOpen, setIsShopModalOpen] = useState(false);
+  const [isOTPModalOpen, setIsOTPModalOpen] = useState(false);
 
+  const [currentPage, setCurrentPage] = useState(0);
   const categories = [
     { name: 'Shopping', iconName: 'Shopping', color: 'bg-[#1C1061]' },
     { name: 'Healthcare', iconName: 'Healthcare', color: 'bg-[#0065B3]' },
@@ -56,6 +65,31 @@ const HomePage = () => {
   const handleCategoryClick = (index) => {
     setActiveCategory(index);
   };
+
+  const handleSearch = () => {
+    console.log('Search Query:', searchQuery);
+    console.log('Selected Location:', selectedLocation);
+    // Add your search logic here
+  };
+
+  const handleActivateClick = () => {
+    setIsOTPModalOpen(true);
+  };
+
+  const handleCloseOTPModal = () => {
+    setIsOTPModalOpen(false);
+  };
+
+  const locations = [
+    'Mumbai, Maharashtra',
+    'Delhi, Delhi',
+    'Bangalore, Karnataka',
+    'Hyderabad, Telangana',
+    'Chennai, Tamil Nadu',
+    'Kolkata, West Bengal',
+    'Pune, Maharashtra',
+    'Ahmedabad, Gujarat',
+  ];
 
   const howItWorksSteps = [
     {
@@ -137,77 +171,122 @@ const HomePage = () => {
 
   return (
     <div className="min-h-screen bg-white">
-      {/* Hero Section */}
+      {/* Hero Section with Search */}
       <div className="px-6 ml-4 py-8">
         <section className="bg-[#7AC3FB] py-24 px-6 relative overflow-hidden rounded-3xl">
           {/* Background decorative elements */}
           <div className="absolute inset-0 bg-gradient-to-r from-blue-400/30 to-cyan-400/20"></div>
 
           <div className="max-w-7xl mx-auto text-center relative z-10">
-            <h1 className="font-figtree text-4xl md:text-6xl font-bold mb-12 leading-tight text-[#3D3C96]">
+            <h1 className="font-figtree text-4xl md:text-5xl font-bold mb-6 text-[#3D3C96]">
               Unlock Amazing Discounts with
               <br />
               Our Pravasi Previlage Card.
             </h1>
 
-            {/* Loyalty Card Display */}
-            <div className="mb-16 flex justify-center">
-              <LoyaltyCard />
+            {/* Subtitle */}
+            <p className="text-[#222158] opacity-67 text-xl font-semibold mb-14 font-figtree">
+              Find stores near you and enjoy exclusive discounts on shopping,
+              <br />
+              dining, wellness, and more.
+            </p>
+
+            {/* Search Form */}
+            <div className="max-w-4xl mx-auto mb-16">
+              <div className="bg-white rounded-2xl p-3 flex flex-col md:flex-row gap-3">
+                {/* Search Input */}
+                <div className="flex-1 relative border border-[#C7C7C7] rounded-2xl p-2">
+                  <input
+                    type="text"
+                    placeholder="Search for shop, healthcare, travel..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full px-4 py-2 border-0 rounded-xl placeholder-[#868686] placeholder-font-semibold 
+             placeholder-text-sm"
+                  />
+                  <CategoryIcon
+                    className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400"
+                    width={20}
+                    height={20}
+                  />
+                </div>
+
+                {/* Location Dropdown */}
+                <div className="relative min-w-[250px] border border-[#C7C7C7] rounded-2xl p-2">
+                  <MapPin
+                    className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400"
+                    size={20}
+                  />
+                  <select
+                    value={selectedLocation}
+                    onChange={(e) => setSelectedLocation(e.target.value)}
+                    className={`w-full pl-12 pr-4 py-3 border-0 rounded-xl cursor-pointer
+              ${selectedLocation === '' ? 'text-[#868686] font-semibold text-sm' : 'text-black'}`}
+                  >
+                    <option value="" disabled>
+                      Search Location...
+                    </option>
+                    {locations.map((location, index) => (
+                      <option key={index} value={location}>
+                        {location}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Search Button */}
+                <button
+                  onClick={handleSearch}
+                  className="bg-[#AFDCFF] text-[#222158] px-8 py-4 rounded-2xl text-sm font-semibold transition-colors duration-200 flex items-center justify-center gap-2 min-w-[140px]"
+                >
+                  <Search size={20} />
+                  Search Now
+                </button>
+              </div>
             </div>
 
             {/* CTA Section - matching the UI layout */}
             <div className="mx-4 md:mx-8 lg:mx-12 font-figtree">
-              <div className="flex flex-col items-center justify-center mt-16">
-                {/* Card (if any) should go above this section */}
+              <div className="flex flex-col md:flex-row items-center justify-between mt-16">
+                {/* Left text */}
+                <div className="text-left mb-6 md:mb-0 flex-1">
+                  <p className="text-xl text-[#222158] font-semibold">
+                    Enjoy exclusive savings at your
+                    <br />
+                    favorite stores. Shop smart, save
+                    <br />
+                    big!
+                  </p>
+                </div>
 
-                {/* Bottom Section: Text and Buttons */}
-                <div className="flex flex-col md:flex-row items-center justify-between w-full max-w-6xl mx-auto">
-                  {/* Left text */}
-                  <div className="text-left mb-6 md:mb-0 flex-1">
-                    <p className="text-xl text-[#222158] font-semibold">
-                      Enjoy exclusive savings at your <br />
-                      favorite stores. Shop smart, save <br />
-                      big!
-                    </p>
-                  </div>
-
-                  {/* Center buttons */}
-                  <div className="flex space-x-4 flex-shrink-0 mx-4 my-4 md:my-0">
-                    {/* Register Shop */}
-                    <div className="p-[2px] rounded-full border border-[#222158]">
-                      <button
-                        className="font-semibold px-8 py-3 md:px-10 md:py-4 rounded-full flex items-center space-x-2 transition-colors duration-200"
-                        onClick={() => setIsShopModalOpen(true)}
-                      >
-                        <span className="text-[#222158] text-xl">
-                          Register Shop
-                        </span>
-                        <ArrowUpRight size={20} className="text-[#222158]" />
-                      </button>
-                    </div>
-
-                    {/* Apply Now */}
-                    <div
-                      className="p-[2px] rounded-full"
-                      style={{
-                        background:
-                          'linear-gradient(177.36deg, #222158 -13.59%, rgba(34, 33, 88, 0) 50.99%)',
-                      }}
+                {/* Center button */}
+                <div className="flex-shrink-0 mx-8">
+                  <div
+                    className="p-[2px] rounded-full"
+                    style={{
+                      background:
+                        'linear-gradient(177.36deg, #222158 -13.59%, rgba(34, 33, 88, 0) 50.99%)',
+                    }}
+                  >
+                    <button
+                      className="bg-sky-300 hover:bg-sky-200 font-semibold px-12 py-4 rounded-full shadow-lg flex items-center space-x-2 transition-colors duration-200"
+                      onClick={handleActivateClick}
                     >
-                      <button className="bg-sky-300 hover:bg-sky-200 font-semibold px-8 py-3 md:px-10 md:py-4 rounded-full flex items-center space-x-2 transition-colors duration-200">
-                        <span className="text-[#222158] text-xl">
-                          APPLY NOW
-                        </span>
-                        <ArrowUpRight size={20} className="text-[#222158]" />
-                      </button>
-                    </div>
+                      <span className="text-[#222158] font-semibold text-xl">
+                        ACTIVATE
+                      </span>
+                      <ArrowUpRight
+                        size={20}
+                        className="text-[#222158] font-semibold text-xl"
+                      />
+                    </button>
                   </div>
+                </div>
 
-                  {/* Right text */}
-                  <div className="text-right flex-1">
-                    <div className="text-[#222158] font-semibold text-xl">
-                      Activate & Save Instantly!
-                    </div>
+                {/* Right text */}
+                <div className="text-right flex-1">
+                  <div className="text-[#222158] font-semibold text-xl">
+                    Activate & Save Instantly!
                   </div>
                 </div>
               </div>
@@ -373,12 +452,10 @@ const HomePage = () => {
           </div>
         </section>
       </div>
-      <ShopRegistrationModal
-        isOpen={isShopModalOpen}
-        onClose={() => setIsShopModalOpen(false)}
-      />
+
+      <OTPModal isOpen={isOTPModalOpen} onClose={handleCloseOTPModal} />
     </div>
   );
 };
 
-export default HomePage;
+export default SearchPage;

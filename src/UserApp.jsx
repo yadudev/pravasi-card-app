@@ -4,11 +4,11 @@ import Header from './components/layout/Header';
 import Footer from './components/layout/Footer';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
-// Import other user pages here
+import SearchPage from './pages/SearchPage';
 
 function UserApp() {
   const navigate = useNavigate();
-  
+
   const handleNavigate = (route) => {
     if (route === 'login') {
       navigate('/login');
@@ -24,7 +24,7 @@ function UserApp() {
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/login" element={<LoginPage />} />
-          {/* Add more user routes here */}
+          <Route path="/search" element={<SearchPage />} />
           <Route path="/register" element={<div>Register Page</div>} />
           <Route path="/profile" element={<div>Profile Page</div>} />
           <Route path="/shops" element={<div>Shops Page</div>} />

@@ -1,14 +1,10 @@
-// LoginPage.jsx - Updated with gradient divider and fixes
 import React, { useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 
-// Import reusable components (no Layout needed)
 import Button from '../components/ui/Button';
-import Card from '../components/ui/Card';
-import Input from '../components/ui/Input';
 import pravasiLogo from '../assets/images/pravasi-logo.png';
 import FacebookIcon from '../assets/icons/FacebookIcon';
-import GoogleIcon from '../assets/icons/GoogleIcon'; // Fixed typo: was GoogleIon
+import GoogleIcon from '../assets/icons/GoogleIcon'; 
 import AppleIcon from '../assets/icons/AppleIcon';
 
 const LoginPage = () => {
