@@ -3,7 +3,6 @@ import { Routes, Route, useNavigate } from 'react-router-dom';
 import Header from './components/layout/Header';
 import Footer from './components/layout/Footer';
 import HomePage from './pages/HomePage';
-import LoginPage from './pages/LoginPage';
 import SearchPage from './pages/SearchPage';
 
 function UserApp() {
@@ -23,7 +22,6 @@ function UserApp() {
       <main>
         <Routes>
           <Route path="/" element={<HomePage />} />
-          <Route path="/login" element={<LoginPage />} />
           <Route path="/search" element={<SearchPage />} />
           <Route path="/register" element={<div>Register Page</div>} />
           <Route path="/profile" element={<div>Profile Page</div>} />

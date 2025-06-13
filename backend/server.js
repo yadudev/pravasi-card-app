@@ -17,9 +17,7 @@ const initDefaultAdmin = require('./utils/initAdmin');
 const adminAuthRoutes = require('./routes/admin/auth');
 const adminUserRoutes = require('./routes/admin/users');
 const adminShopRoutes = require('./routes/admin/shops');
-const adminDiscountRoutes = require('./routes/admin/discounts');
-const adminContentRoutes = require('./routes/admin/content');
-const adminAnalyticsRoutes = require('./routes/admin/analytics');
+const userRoutes = require('./routes/usersRoutes');
 
 const app = express();
 
@@ -75,10 +73,7 @@ app.get('/health', (req, res) => {
 app.use('/api/admin/auth', adminAuthRoutes);
 app.use('/api/admin/users', adminUserRoutes);
 app.use('/api/admin/shops', adminShopRoutes);
-app.use('/api/admin/discounts', adminDiscountRoutes);
-app.use('/api/admin/content', adminContentRoutes);
-app.use('/api/admin/analytics', adminAnalyticsRoutes);
-
+app.use('/api/users', userRoutes);
 // 404 handler
 app.use('*', (req, res) => {
   res.status(404).json({

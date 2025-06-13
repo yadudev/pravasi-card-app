@@ -7,16 +7,26 @@ class Helpers {
    * Generate unique ID with optional prefix
    */
   static generateUniqueId(prefix = '') {
-    const timestamp = Date.now().toString();
-    const random = crypto.randomBytes(4).toString('hex').toUpperCase();
-    return `${prefix}${timestamp}${random}`;
+    // Generate a random 12-digit number
+    const randomPart = crypto
+      .randomInt(1e11, 1e12)
+      .toString()
+      .padStart(12, '0');
+
+    // Use the last 4 digits of the current timestamp (for additional uniqueness)
+    const timePart = Date.now().toString().slice(-4);
+
+    // Combine to make a 16-digit ID
+    const uniqueId = `${randomPart}${timePart}`;
+
+    return `${prefix}${uniqueId}`;
   }
 
   /**
    * Generate discount card number
    */
   static generateCardNumber() {
-    return this.generateUniqueId('SD');
+    return this.generateUniqueId();
   }
 
   /**
@@ -31,7 +41,7 @@ class Helpers {
    */
   static calculateDiscountTier(totalSpent) {
     const amount = parseFloat(totalSpent) || 0;
-    
+
     if (amount >= 100000) return 'Platinum';
     if (amount >= 50000) return 'Gold';
     if (amount >= 25000) return 'Silver';
@@ -44,9 +54,17 @@ class Helpers {
   static getTierRequirements() {
     return {
       Bronze: { min: 0, max: 24999, benefits: 'Basic discounts up to 5%' },
-      Silver: { min: 25000, max: 49999, benefits: 'Enhanced discounts up to 10%' },
+      Silver: {
+        min: 25000,
+        max: 49999,
+        benefits: 'Enhanced discounts up to 10%',
+      },
       Gold: { min: 50000, max: 99999, benefits: 'Premium discounts up to 15%' },
-      Platinum: { min: 100000, max: Infinity, benefits: 'Exclusive discounts up to 20%' }
+      Platinum: {
+        min: 100000,
+        max: Infinity,
+        benefits: 'Exclusive discounts up to 20%',
+      },
     };
   }
 
@@ -59,7 +77,7 @@ class Helpers {
       style: 'currency',
       currency: currency,
       minimumFractionDigits: 2,
-      maximumFractionDigits: 2
+      maximumFractionDigits: 2,
     }).format(numAmount);
   }
 
@@ -70,7 +88,7 @@ class Helpers {
     const num = parseFloat(number) || 0;
     return new Intl.NumberFormat('en-IN', {
       minimumFractionDigits: decimals,
-      maximumFractionDigits: decimals
+      maximumFractionDigits: decimals,
     }).format(num);
   }
 
@@ -88,7 +106,7 @@ class Helpers {
   static validatePhone(phone) {
     // Remove all non-digits
     const cleanPhone = phone.replace(/\D/g, '');
-    
+
     // Check for Indian mobile number patterns
     const phoneRegex = /^[6-9]\d{9}$/;
     return phoneRegex.test(cleanPhone);
@@ -99,7 +117,8 @@ class Helpers {
    */
   static validateGSTNumber(gst) {
     if (!gst) return true; // GST is optional
-    const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+    const gstRegex =
+      /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
     return gstRegex.test(gst.toUpperCase());
   }
 
@@ -139,7 +158,7 @@ class Helpers {
   static formatDateRange(startDate, endDate, format = 'YYYY-MM-DD') {
     return {
       start: moment(startDate).format(format),
-      end: moment(endDate).format(format)
+      end: moment(endDate).format(format),
     };
   }
 
@@ -192,7 +211,7 @@ class Helpers {
       start: start.toDate(),
       end: end.toDate(),
       startFormatted: start.format('YYYY-MM-DD'),
-      endFormatted: end.format('YYYY-MM-DD')
+      endFormatted: end.format('YYYY-MM-DD'),
     };
   }
 
@@ -203,7 +222,7 @@ class Helpers {
     const currentPage = parseInt(page) || 1;
     const itemsPerPage = parseInt(limit) || 10;
     const totalPages = Math.ceil(total / itemsPerPage);
-    
+
     return {
       currentPage,
       totalPages,
@@ -212,7 +231,7 @@ class Helpers {
       hasNext: currentPage < totalPages,
       hasPrev: currentPage > 1,
       startItem: (currentPage - 1) * itemsPerPage + 1,
-      endItem: Math.min(currentPage * itemsPerPage, total)
+      endItem: Math.min(currentPage * itemsPerPage, total),
     };
   }
 
@@ -244,7 +263,8 @@ class Helpers {
       originalAmount: parseFloat(amount),
       discountPercentage: parseFloat(percentage),
       discountAmount: Math.round(discountAmount * 100) / 100,
-      finalAmount: Math.round((parseFloat(amount) - discountAmount) * 100) / 100
+      finalAmount:
+        Math.round((parseFloat(amount) - discountAmount) * 100) / 100,
     };
   }
 
@@ -256,23 +276,26 @@ class Helpers {
     const lowercase = 'abcdefghijklmnopqrstuvwxyz';
     const numbers = '0123456789';
     const symbols = '!@#$%^&*()_+-=[]{}|;:,.<>?';
-    
+
     const allChars = uppercase + lowercase + numbers + symbols;
     let password = '';
-    
+
     // Ensure at least one character from each category
     password += uppercase[Math.floor(Math.random() * uppercase.length)];
     password += lowercase[Math.floor(Math.random() * lowercase.length)];
     password += numbers[Math.floor(Math.random() * numbers.length)];
     password += symbols[Math.floor(Math.random() * symbols.length)];
-    
+
     // Fill the rest randomly
     for (let i = 4; i < length; i++) {
       password += allChars[Math.floor(Math.random() * allChars.length)];
     }
-    
+
     // Shuffle the password
-    return password.split('').sort(() => Math.random() - 0.5).join('');
+    return password
+      .split('')
+      .sort(() => Math.random() - 0.5)
+      .join('');
   }
 
   /**
@@ -283,22 +306,24 @@ class Helpers {
     const hasUppercase = /[A-Z]/.test(password);
     const hasLowercase = /[a-z]/.test(password);
     const hasNumbers = /\d/.test(password);
-    const hasSpecialChar = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password);
-    
+    const hasSpecialChar = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(
+      password
+    );
+
     const score = [
       password.length >= minLength,
       hasUppercase,
       hasLowercase,
       hasNumbers,
-      hasSpecialChar
+      hasSpecialChar,
     ].filter(Boolean).length;
-    
+
     let strength = 'Very Weak';
     if (score >= 5) strength = 'Very Strong';
     else if (score >= 4) strength = 'Strong';
     else if (score >= 3) strength = 'Medium';
     else if (score >= 2) strength = 'Weak';
-    
+
     return {
       score,
       strength,
@@ -308,8 +333,8 @@ class Helpers {
         hasUppercase,
         hasLowercase,
         hasNumbers,
-        hasSpecialChar
-      }
+        hasSpecialChar,
+      },
     };
   }
 
@@ -318,13 +343,13 @@ class Helpers {
    */
   static formatBytes(bytes, decimals = 2) {
     if (bytes === 0) return '0 Bytes';
-    
+
     const k = 1024;
     const dm = decimals < 0 ? 0 : decimals;
     const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
-    
+
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    
+
     return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
   }
 
@@ -353,7 +378,7 @@ class Helpers {
    */
   static buildWhereClause(filters) {
     const whereClause = {};
-    
+
     Object.entries(filters).forEach(([key, value]) => {
       if (value !== undefined && value !== null && value !== '') {
         if (Array.isArray(value)) {
@@ -365,7 +390,7 @@ class Helpers {
         }
       }
     });
-    
+
     return whereClause;
   }
 
@@ -378,7 +403,7 @@ class Helpers {
       cardNumber,
       userId,
       issuedAt: new Date().toISOString(),
-      version: '1.0'
+      version: '1.0',
     });
   }
 
@@ -387,13 +412,18 @@ class Helpers {
    */
   static maskEmail(email) {
     const [localPart, domain] = email.split('@');
-    const maskedLocal = localPart.substring(0, 2) + '*'.repeat(localPart.length - 2);
+    const maskedLocal =
+      localPart.substring(0, 2) + '*'.repeat(localPart.length - 2);
     return `${maskedLocal}@${domain}`;
   }
 
   static maskPhone(phone) {
     if (phone.length <= 4) return phone;
-    return phone.substring(0, 2) + '*'.repeat(phone.length - 4) + phone.substring(phone.length - 2);
+    return (
+      phone.substring(0, 2) +
+      '*'.repeat(phone.length - 4) +
+      phone.substring(phone.length - 2)
+    );
   }
 
   /**
@@ -472,7 +502,7 @@ class Helpers {
   static getTimeDifference(date1, date2 = new Date()) {
     const diff = moment(date2).diff(moment(date1));
     const duration = moment.duration(diff);
-    
+
     return {
       years: duration.years(),
       months: duration.months(),
@@ -480,7 +510,7 @@ class Helpers {
       hours: duration.hours(),
       minutes: duration.minutes(),
       seconds: duration.seconds(),
-      humanReadable: moment(date1).fromNow()
+      humanReadable: moment(date1).fromNow(),
     };
   }
 
@@ -489,18 +519,21 @@ class Helpers {
    */
   static generateCSV(data, headers = null) {
     if (!data || data.length === 0) return '';
-    
+
     const csvHeaders = headers || Object.keys(data[0]);
-    const csvRows = data.map(row => 
-      csvHeaders.map(header => {
-        const value = row[header] || '';
-        // Escape commas and quotes
-        return typeof value === 'string' && (value.includes(',') || value.includes('"')) 
-          ? `"${value.replace(/"/g, '""')}"` 
-          : value;
-      }).join(',')
+    const csvRows = data.map((row) =>
+      csvHeaders
+        .map((header) => {
+          const value = row[header] || '';
+          // Escape commas and quotes
+          return typeof value === 'string' &&
+            (value.includes(',') || value.includes('"'))
+            ? `"${value.replace(/"/g, '""')}"`
+            : value;
+        })
+        .join(',')
     );
-    
+
     return [csvHeaders.join(','), ...csvRows].join('\n');
   }
 
@@ -510,10 +543,10 @@ class Helpers {
   static parseCSV(csvString, hasHeaders = true) {
     const lines = csvString.trim().split('\n');
     if (lines.length === 0) return [];
-    
+
     const headers = hasHeaders ? lines[0].split(',') : null;
     const dataLines = hasHeaders ? lines.slice(1) : lines;
-    
+
     return dataLines.map((line, index) => {
       const values = line.split(',');
       if (headers) {
@@ -523,7 +556,7 @@ class Helpers {
         });
         return obj;
       } else {
-        return values.map(val => val.trim());
+        return values.map((val) => val.trim());
       }
     });
   }

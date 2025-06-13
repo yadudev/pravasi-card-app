@@ -65,8 +65,14 @@ export const usersAPI = {
 
   getUserById: (id) => apiCall(`/admin/users/${id}`),
 
-  createUser: (userData) =>
-    apiCall('/admin/users', {
+  signUp: (userData) =>
+    apiCall('/users/signup', {
+      method: 'POST',
+      body: JSON.stringify(userData),
+    }),
+
+  createProfile: (userData) =>
+    apiCall('/users/createProfile', {
       method: 'POST',
       body: JSON.stringify(userData),
     }),
