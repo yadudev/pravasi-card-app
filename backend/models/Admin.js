@@ -11,7 +11,7 @@ module.exports = (sequelize, DataTypes) => {
       },
       username: {
         type: DataTypes.STRING(50),
-        allowNull: false,
+        allowNull: true,
         unique: true,
         validate: {
           len: [3, 50],
@@ -20,11 +20,16 @@ module.exports = (sequelize, DataTypes) => {
       },
       email: {
         type: DataTypes.STRING(100),
-        allowNull: false,
+        allowNull: true,
         unique: true,
         validate: {
           isEmail: true,
         },
+      },
+      phone: {
+        type: DataTypes.STRING(25),
+        allowNull: true,
+        unique: true,
       },
       password: {
         type: DataTypes.STRING(255),
@@ -35,13 +40,13 @@ module.exports = (sequelize, DataTypes) => {
       },
       fullName: {
         type: DataTypes.STRING(100),
-        allowNull: false,
+        allowNull: true,
         validate: {
           len: [2, 100],
         },
       },
       role: {
-        type: DataTypes.ENUM('super_admin', 'admin', 'moderator'),
+        type: DataTypes.ENUM('super_admin', 'admin', 'moderator', 'user'),
         defaultValue: 'admin',
       },
       isActive: {
@@ -50,22 +55,21 @@ module.exports = (sequelize, DataTypes) => {
       },
       lastLogin: {
         type: DataTypes.DATE,
-        allowNull: true, // Explicitly allow null
+        allowNull: true,
       },
       avatar: {
         type: DataTypes.STRING(255),
-        allowNull: true, // Explicitly allow null
+        allowNull: true,
       },
       loginAttempts: {
         type: DataTypes.INTEGER,
         defaultValue: 0,
-        allowNull: false, // Ensure it's never null
+        allowNull: false,
       },
       lockUntil: {
         type: DataTypes.DATE,
-        allowNull: true, // Explicitly allow null
+        allowNull: true,
       },
-      // Add these fields for password reset functionality
       resetPasswordToken: {
         type: DataTypes.STRING(255),
         allowNull: true,
@@ -80,9 +84,7 @@ module.exports = (sequelize, DataTypes) => {
       timestamps: true,
       hooks: {
         beforeSave: async (admin) => {
-          // Only hash if password is changed and not already hashed
           if (admin.changed('password') && admin.password) {
-            // Check if password is already hashed (bcrypt hashes start with $2)
             const isAlreadyHashed = admin.password.startsWith('$2');
             if (!isAlreadyHashed) {
               admin.password = await bcrypt.hash(admin.password, 12);
@@ -90,13 +92,11 @@ module.exports = (sequelize, DataTypes) => {
           }
         },
       },
-      // Add default scope to exclude sensitive fields
       defaultScope: {
         attributes: {
           exclude: ['password', 'resetPasswordToken'],
         },
       },
-      // Add scopes for when you need to include password
       scopes: {
         withPassword: {
           attributes: { include: ['password'] },
@@ -116,19 +116,19 @@ module.exports = (sequelize, DataTypes) => {
       // Shops approved by this admin
       Admin.hasMany(models.Shop, {
         foreignKey: 'approvedBy',
-        as: 'approvedShops'
+        as: 'approvedShops',
       });
 
       // Shops rejected by this admin
       Admin.hasMany(models.Shop, {
         foreignKey: 'rejectedBy',
-        as: 'rejectedShops'
+        as: 'rejectedShops',
       });
 
       // Shops blocked by this admin
       Admin.hasMany(models.Shop, {
         foreignKey: 'blockedBy',
-        as: 'blockedShops'
+        as: 'blockedShops',
       });
     }
 
@@ -136,7 +136,7 @@ module.exports = (sequelize, DataTypes) => {
     if (models.User) {
       Admin.hasMany(models.User, {
         foreignKey: 'createdBy',
-        as: 'createdUsers'
+        as: 'createdUsers',
       });
     }
   };
@@ -144,7 +144,6 @@ module.exports = (sequelize, DataTypes) => {
   // Instance method to validate password
   Admin.prototype.validatePassword = async function (password) {
     try {
-  
       if (!this.password || !password) {
         console.log('❌ Missing password or hash');
         return false;

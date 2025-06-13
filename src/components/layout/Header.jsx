@@ -5,21 +5,24 @@ import SignupModal from '../SignUpModal';
 import LoginModal from '../LoginModal';
 import ProfileModal from '../ProfileModal'; // Import the ProfileModal
 import CreditCardIcon from '../../assets/icons/CreditCardIcon';
+import ActivateModal from '../ActivateModal';
 
 const Header = ({ onNavigate }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isSignupModalOpen, setIsSignupModalOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
-  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false); 
-
-  const [isLoggedIn, setIsLoggedIn] = useState(true);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [newUserData, setNewUserData] = useState(null);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [user, setUser] = useState({
     name: 'Godzilla D.White',
     email: 'godzillaDwhite@gmail.com',
     phone: '+91 832487778',
     location: 'Kochi',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face',
+    avatar:
+      'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face',
   });
 
   const navItems = [
@@ -73,6 +76,23 @@ const Header = ({ onNavigate }) => {
 
   const handleCloseProfileModal = () => {
     setIsProfileModalOpen(false);
+  };
+
+  const handleSignupSuccess = (userId, userData) => {
+    console.log('User created with ID:', userId);
+    console.log('User data:', userData);
+
+    setNewUserData({
+      id: userId,
+      ...userData,
+    });
+
+    setShowProfileModal(true);
+  };
+
+  const handleCloseProfileCreateModal = () => {
+    setShowProfileModal(false);
+    setNewUserData(null);
   };
 
   // Get user initials for fallback avatar
@@ -188,7 +208,9 @@ const Header = ({ onNavigate }) => {
                           <div className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors">
                             <CreditCardIcon />
                           </div>
-                          <span className="font-medium text-sm">Manage Card</span>
+                          <span className="font-medium text-sm">
+                            Manage Card
+                          </span>
                         </button>
                         <button
                           onClick={handleLogout}
@@ -390,15 +412,16 @@ const Header = ({ onNavigate }) => {
         isOpen={isSignupModalOpen}
         onClose={handleCloseSignupModal}
         onSwitchToLogin={handleLoginClick}
+        onSignupSuccess={handleSignupSuccess}
       />
-      
+
       {/* Login Modal */}
       <LoginModal
         isOpen={isLoginModalOpen}
         onClose={handleCloseLoginModal}
         onSwitchToSignup={handleSignupClick}
       />
-      
+
       {/* Profile Modal */}
       <ProfileModal
         isOpen={isProfileModalOpen}
@@ -407,6 +430,14 @@ const Header = ({ onNavigate }) => {
         onLogout={handleLogout}
         getUserInitials={getUserInitials}
       />
+      {showProfileModal && newUserData && (
+        <ActivateModal
+          isOpen={showProfileModal}
+          onClose={handleCloseProfileCreateModal}
+          userId={newUserData.id}
+          userData={newUserData}
+        />
+      )}
     </>
   );
 };

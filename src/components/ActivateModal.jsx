@@ -1,16 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronDown, X } from 'lucide-react';
+import { usersAPI } from '../services/api';
 
-const ActivateModal = ({ isOpen, onClose }) => {
+const ActivateModal = ({ isOpen, onClose, userId, userData }) => {
   const [formData, setFormData] = useState({
+    userId: userId,
+    adminId: userData?.adminId || '',
     fullName: '',
-    email: '',
+    email: userData?.email || '',
     countryCode: '+91',
-    phoneNumber: '',
+    phone: userData?.phone || '',
     location: '',
   });
 
   const [errors, setErrors] = useState({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   const countryCodes = [
     { code: '+91', flag: '🇮🇳', country: 'India' },
@@ -53,10 +58,10 @@ const ActivateModal = ({ isOpen, onClose }) => {
       newErrors.email = 'Please enter a valid email';
     }
 
-    if (!formData.phoneNumber.trim()) {
-      newErrors.phoneNumber = 'Phone number is required';
-    } else if (!/^\d{10}$/.test(formData.phoneNumber.replace(/\s/g, ''))) {
-      newErrors.phoneNumber = 'Please enter a valid phone number';
+    if (!formData.phone.trim()) {
+      newErrors.phone = 'Phone number is required';
+    } else if (!/^\d{10}$/.test(formData.phone.replace(/\s/g, ''))) {
+      newErrors.phone = 'Please enter a valid phone number';
     }
 
     if (!formData.location.trim()) {
@@ -67,11 +72,41 @@ const ActivateModal = ({ isOpen, onClose }) => {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = () => {
-    if (validateForm()) {
-      console.log('Form submitted:', formData);
-      alert('Application submitted successfully!');
-      onClose(); // Close modal after successful submission
+  const handleSubmit = async () => {
+    if (!validateForm()) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    setSubmitError('');
+
+    try {
+      console.log({formData})
+      const result = await usersAPI.createProfile(formData);
+      console.log({ result });
+      if (result.success) {
+        console.log('Profile created successfully:', result.data);
+        alert('Application submitted successfully!');
+        onClose();
+        setFormData({
+          userId: userId,
+          adminId: userData?.adminId || '',
+          fullName: '',
+          email: userData?.email || '',
+          countryCode: '+91',
+          phone: userData?.phone || '',
+          location: '',
+        });
+      } else {
+        setSubmitError(
+          result.error || 'Failed to submit application. Please try again.'
+        );
+      }
+    } catch (error) {
+      console.error('Error submitting form:', error);
+      setSubmitError('An unexpected error occurred. Please try again.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -89,6 +124,11 @@ const ActivateModal = ({ isOpen, onClose }) => {
         [name]: '',
       }));
     }
+
+    // Clear submit error when user starts typing
+    if (submitError) {
+      setSubmitError('');
+    }
   };
 
   const handleCountryCodeChange = (e) => {
@@ -99,10 +139,14 @@ const ActivateModal = ({ isOpen, onClose }) => {
   };
 
   const handleBackdropClick = (e) => {
-    // Close modal when clicking on backdrop
-    if (e.target === e.currentTarget) {
+    // Close modal when clicking on backdrop (only if not submitting)
+    if (e.target === e.currentTarget && !isSubmitting) {
       onClose();
     }
+  };
+
+  const handleModalContentClick = (e) => {
+    e.stopPropagation();
   };
 
   if (!isOpen) return null;
@@ -113,7 +157,10 @@ const ActivateModal = ({ isOpen, onClose }) => {
       onClick={handleBackdropClick}
     >
       {/* Modal Container */}
-      <div className="relative rounded-3xl bg-white border-white border-4 shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div
+        className="relative rounded-3xl bg-white border-white border-4 shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+        onClick={handleModalContentClick}
+      >
         {/* Title and Subtitle */}
         <div className="text-left mb-6 px-8 pt-6">
           <h1 className="text-2xl font-medium text-black mb-2 pr-8">
@@ -126,6 +173,13 @@ const ActivateModal = ({ isOpen, onClose }) => {
         {/* Form */}
         <div className="px-10 pb-8 border border-[#3D3C96] rounded-2xl mx-8 mb-8">
           <div className="space-y-6 py-8">
+            {/* Submit Error Message */}
+            {submitError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                {submitError}
+              </div>
+            )}
+
             {/* Full Name Field */}
             <div>
               <label className="block text-sm font-semibold text-[#666666] mb-2">
@@ -137,9 +191,10 @@ const ActivateModal = ({ isOpen, onClose }) => {
                 type="text"
                 value={formData.fullName}
                 onChange={handleInputChange}
+                disabled={isSubmitting}
                 className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all placeholder-gray-400 text-gray-900 bg-white ${
                   errors.fullName ? 'border-red-500' : 'border-gray-300'
-                }`}
+                } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
               />
               {errors.fullName && (
                 <p className="text-red-500 text-xs mt-1">{errors.fullName}</p>
@@ -157,9 +212,10 @@ const ActivateModal = ({ isOpen, onClose }) => {
                 type="email"
                 value={formData.email}
                 onChange={handleInputChange}
+                disabled={isSubmitting}
                 className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all placeholder-gray-400 text-gray-900 bg-white ${
                   errors.email ? 'border-red-500' : 'border-gray-300'
-                }`}
+                } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
               />
               {errors.email && (
                 <p className="text-red-500 text-xs mt-1">{errors.email}</p>
@@ -170,13 +226,20 @@ const ActivateModal = ({ isOpen, onClose }) => {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Phone Number*
               </label>
-              <div className="flex border border-gray-300 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all">
+              <div
+                className={`flex border border-gray-300 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all ${
+                  isSubmitting ? 'opacity-50' : ''
+                }`}
+              >
                 {/* Country Code Selector */}
                 <div className="relative bg-white">
                   <select
                     value={formData.countryCode}
                     onChange={handleCountryCodeChange}
-                    className="appearance-none bg-white border-0 px-3 py-3 pr-8 focus:ring-0 focus:border-0 outline-none text-gray-900 cursor-pointer min-w-[100px] border-r border-gray-300"
+                    disabled={isSubmitting}
+                    className={`appearance-none bg-white border-0 px-3 py-3 pr-8 focus:ring-0 focus:border-0 outline-none text-gray-900 min-w-[100px] border-r border-gray-300 ${
+                      isSubmitting ? 'cursor-not-allowed' : 'cursor-pointer'
+                    }`}
                     style={{
                       fontFamily: 'system-ui, -apple-system, sans-serif',
                     }}
@@ -195,18 +258,19 @@ const ActivateModal = ({ isOpen, onClose }) => {
 
                 {/* Phone Number Input */}
                 <input
-                  name="phoneNumber"
+                  name="phone"
                   placeholder="Type your number"
                   type="tel"
-                  value={formData.phoneNumber}
+                  value={formData.phone}
                   onChange={handleInputChange}
-                  className="flex-1 px-4 py-3 border-0 focus:ring-0 focus:border-0 outline-none placeholder-gray-400 text-gray-900 bg-white"
+                  disabled={isSubmitting}
+                  className={`flex-1 px-4 py-3 border-0 focus:ring-0 focus:border-0 outline-none placeholder-gray-400 text-gray-900 bg-white ${
+                    isSubmitting ? 'cursor-not-allowed' : ''
+                  }`}
                 />
               </div>
-              {errors.phoneNumber && (
-                <p className="text-red-500 text-xs mt-1">
-                  {errors.phoneNumber}
-                </p>
+              {errors.phone && (
+                <p className="text-red-500 text-xs mt-1">{errors.phone}</p>
               )}
             </div>
 
@@ -221,9 +285,10 @@ const ActivateModal = ({ isOpen, onClose }) => {
                 type="text"
                 value={formData.location}
                 onChange={handleInputChange}
+                disabled={isSubmitting}
                 className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all placeholder-gray-400 text-gray-900 bg-white ${
                   errors.location ? 'border-red-500' : 'border-gray-300'
-                }`}
+                } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
               />
               {errors.location && (
                 <p className="text-red-500 text-xs mt-1">{errors.location}</p>
@@ -239,9 +304,14 @@ const ActivateModal = ({ isOpen, onClose }) => {
             >
               <button
                 onClick={handleSubmit}
-                className="w-full bg-[#AFDCFF] text-[#222158] py-4 rounded-lg font-semibold text-base transition-colors duration-200"
+                disabled={isSubmitting}
+                className={`w-full bg-[#AFDCFF] text-[#222158] py-4 rounded-lg font-semibold text-base transition-colors duration-200 ${
+                  isSubmitting
+                    ? 'opacity-50 cursor-not-allowed'
+                    : 'hover:bg-[#9ECFFF]'
+                }`}
               >
-                Apply Now
+                {isSubmitting ? 'Submitting...' : 'Apply Now'}
               </button>
             </div>
           </div>

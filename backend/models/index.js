@@ -173,53 +173,7 @@ addClassMethods(db);
  * @param {Object} db - Database models object
  */
 function addModelHooks(db) {
-  // User hooks
-  db.User.addHook('afterCreate', async (user, options) => {
-    try {
-      // Auto-generate discount card for new users
-      const cardNumber = require('../utils/helpers').generateCardNumber();
-      const expiryDate = new Date();
-      expiryDate.setFullYear(expiryDate.getFullYear() + 1); // 1 year validity
-
-      await db.DiscountCard.create(
-        {
-          userId: user.id,
-          cardNumber,
-          expiryDate,
-          qrCode: require('../utils/helpers').generateQRCodeData(
-            cardNumber,
-            user.id
-          ),
-          isActive: true,
-        },
-        { transaction: options.transaction }
-      );
-
-      logger.info(`Discount card auto-generated for user: ${user.email}`);
-    } catch (error) {
-      logger.error('Error auto-generating discount card:', error);
-    }
-  });
-
-  db.User.addHook('afterUpdate', async (user, options) => {
-    // Update discount tier based on total spent
-    if (user.changed('totalSpent')) {
-      const newTier = require('../utils/helpers').calculateDiscountTier(
-        user.totalSpent
-      );
-      if (newTier !== user.currentDiscountTier) {
-        await user.update(
-          { currentDiscountTier: newTier },
-          {
-            transaction: options.transaction,
-            hooks: false, // Prevent infinite loop
-          }
-        );
-        logger.info(`User tier updated: ${user.email} -> ${newTier}`);
-      }
-    }
-  });
-
+  
   // Transaction hooks
   db.Transaction.addHook('afterCreate', async (transaction, options) => {
     try {

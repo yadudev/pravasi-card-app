@@ -72,7 +72,6 @@ const LoginModal = ({ isOpen, onClose, onSwitchToSignup }) => {
     onSwitchToSignup();
   };
 
-  console.log({ isOpen });
 
   const handleSubmit = () => {};
 

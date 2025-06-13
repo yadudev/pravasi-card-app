@@ -1,73 +1,10 @@
 const express = require('express');
 const { body, query, param } = require('express-validator');
-const UserController = require('../../controllers/admin/userController');
-const AuthMiddleware = require('../../middleware/auth');
-const ValidationMiddleware = require('../../middleware/validation');
+const UserController = require('../controllers/admin/userController');
+const AuthMiddleware = require('../middleware/auth');
+const ValidationMiddleware = require('../middleware/validation');
 
 const router = express.Router();
-
-// Get all users with pagination, search, and filters
-router.get(
-  '/',
-  [
-    AuthMiddleware.authenticate,
-    query('page')
-      .optional()
-      .isInt({ min: 1 })
-      .withMessage('Page must be a positive integer'),
-    query('limit')
-      .optional()
-      .isInt({ min: 1, max: 100 })
-      .withMessage('Limit must be between 1 and 100'),
-    query('search')
-      .optional()
-      .isString()
-      .trim()
-      .withMessage('Search must be a string'),
-    query('status')
-      .optional()
-      .isIn(['active', 'inactive'])
-      .withMessage('Status must be either active or inactive'),
-    query('tier')
-      .optional()
-      .isIn(['Bronze', 'Silver', 'Gold', 'Platinum'])
-      .withMessage('Invalid tier selection'),
-    query('sortBy')
-      .optional()
-      .isIn([
-        'createdAt',
-        'fullName',
-        'email',
-        'totalSpent',
-        'currentDiscountTier',
-      ])
-      .withMessage('Invalid sort field'),
-    query('sortOrder')
-      .optional()
-      .isIn(['ASC', 'DESC'])
-      .withMessage('Sort order must be ASC or DESC'),
-    ValidationMiddleware.validate,
-  ],
-  UserController.getAllUsers
-);
-
-// Get user statistics
-router.get('/stats', AuthMiddleware.authenticate, UserController.getUserStats);
-
-// Export users data
-router.get(
-  '/export',
-  [
-    AuthMiddleware.authenticate,
-    AuthMiddleware.authorize('admin'),
-    query('format')
-      .optional()
-      .isIn(['csv', 'xlsx'])
-      .withMessage('Export format must be csv or xlsx'),
-    ValidationMiddleware.validate,
-  ],
-  UserController.exportUsers
-);
 
 // Get user by ID with detailed information
 router.get(
@@ -80,6 +17,75 @@ router.get(
     ValidationMiddleware.validate,
   ],
   UserController.getUserById
+);
+
+// signup user
+router.post(
+  '/signup',
+  [
+    body('emailOrNumber')
+      .notEmpty()
+      .withMessage('Email or phone is required')
+      .custom((value) => {
+        const isEmail = value.includes('@');
+        const isPhone = /^[6-9]\d{9}$/.test(value);
+        if (!isEmail && !isPhone) {
+          throw new Error(
+            'Please provide a valid email or Indian phone number'
+          );
+        }
+        return true;
+      }),
+
+    body('password')
+      .isLength({ min: 8 })
+      .withMessage('Password must be at least 8 characters')
+      .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
+      .withMessage('Password must contain uppercase, lowercase, and a number'),
+
+    ValidationMiddleware.validate,
+  ],
+  UserController.signup
+);
+
+// user profile creation
+
+router.post(
+  '/createProfile',
+  [
+    body('userId')
+      .notEmpty()
+      .withMessage('User ID is required')
+      .isInt({ min: 1 })
+      .withMessage('User ID must be a valid positive integer'),
+    body('fullName')
+      .notEmpty()
+      .withMessage('Full name is required')
+      .isLength({ min: 2, max: 100 })
+      .withMessage('Full name must be between 2 and 100 characters')
+      .matches(/^[a-zA-Z\s]+$/)
+      .withMessage('Full name should only contain letters and spaces'),
+    body('email')
+      .notEmpty()
+      .withMessage('Email is required')
+      .isEmail()
+      .withMessage('Please provide a valid email address')
+      .normalizeEmail(),
+    body('phone')
+      .notEmpty()
+      .withMessage('Phone number is required')
+      .matches(/^[6-9]\d{9}$/)
+      .withMessage('Please provide a valid Indian phone number'),
+    body('location')
+      .notEmpty()
+      .withMessage('Location is required')
+      .isLength({ min: 2, max: 200 })
+      .withMessage('Location must be between 2 and 200 characters')
+      .trim(),
+
+    ValidationMiddleware.validate,
+  ],
+  UserController.createProfile
 );
 
 // Update user information

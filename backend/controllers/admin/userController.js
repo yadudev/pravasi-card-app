@@ -4,6 +4,7 @@ const {
   Transaction,
   Shop,
   sequelize,
+  Admin,
 } = require('../../models');
 const { Op } = require('sequelize');
 const ApiResponse = require('../../utils/responses');
@@ -115,102 +116,337 @@ class UserController {
   }
 
   /**
-   * Create new user
-   * POST /api/admin/users
+   * Step 1: Create user account with login access (Sign up modal)
+   * POST /api/users/signup
    */
-  static async createUser(req, res) {
+  static async signup(req, res) {
     const transaction = await sequelize.transaction();
 
     try {
-      const {
-        fullName,
-        email,
-        phone,
-        password,
-        address,
-        city,
-        state,
-        pincode,
-        dateOfBirth,
-        gender,
-      } = req.body;
+      const { emailOrNumber, password } = req.body;
 
-      // Check if email already exists
+      // Determine if input is email or phone
+      const isEmail = emailOrNumber.includes('@');
+      const userData = {
+        password,
+        isEmailVerified: false,
+        isPhoneVerified: false,
+        isProfileComplete: false,
+        registrationStep: 1,
+      };
+
+      if (isEmail) {
+        const normalizedEmail = emailOrNumber.toLowerCase().trim();
+        userData.email = normalizedEmail;
+        userData.tempEmail = normalizedEmail;
+      } else {
+        const normalizedPhone = emailOrNumber.trim();
+        userData.phone = normalizedPhone;
+        userData.tempPhone = normalizedPhone;
+      }
+
+      const userWhereClause = { [Op.or]: [] };
+      if (userData.email)
+        userWhereClause[Op.or].push({ email: userData.email });
+      if (userData.phone)
+        userWhereClause[Op.or].push({ phone: userData.phone });
+
       const existingUser = await User.findOne({
-        where: { email: email.toLowerCase() },
+        where: userWhereClause,
+        attributes: { exclude: ['createdBy'] },
       });
 
       if (existingUser) {
         await transaction.rollback();
         return res
           .status(400)
-          .json(ApiResponse.error('Email already exists', 400));
+          .json(ApiResponse.error('User already exists', 400));
       }
 
-      // Check if phone already exists
-      const existingPhone = await User.findOne({
-        where: { phone },
-      });
+      const adminWhereClause = { [Op.or]: [] };
+      if (userData.email)
+        adminWhereClause[Op.or].push({ email: userData.email });
+      if (userData.phone)
+        adminWhereClause[Op.or].push({ phone: userData.phone });
 
-      if (existingPhone) {
+      const existingAdmin = await Admin.findOne({ where: adminWhereClause });
+
+      if (existingAdmin) {
         await transaction.rollback();
         return res
           .status(400)
-          .json(ApiResponse.error('Phone number already exists', 400));
+          .json(ApiResponse.error('Account already exists', 400));
       }
 
-      // Create user
-      const user = await User.create(
+      // Create incomplete user record
+      const user = await User.create(userData, { transaction });
+
+      // Create admin entry immediately for login access (with 'user' role)
+      const admin = await Admin.create(
         {
-          fullName: fullName.trim(),
-          email: email.toLowerCase().trim(),
-          phone: phone.trim(),
+          fullName: null,
+          email: userData.email || null,
+          phone: userData.phone || null,
           password,
-          address,
-          city,
-          state,
-          pincode,
-          dateOfBirth,
-          gender,
-          referralCode: Helpers.generateReferralCode(fullName),
-          isEmailVerified: true, // Admin created users are pre-verified
-          isPhoneVerified: true,
-        },
-        { transaction }
-      );
-
-      // Create discount card
-      const cardNumber = Helpers.generateCardNumber();
-      const expiryDate = new Date();
-      expiryDate.setFullYear(expiryDate.getFullYear() + 1); // 1 year validity
-
-      await DiscountCard.create(
-        {
+          role: 'user',
+          permissions: ['read'],
           userId: user.id,
-          cardNumber,
-          expiryDate,
-          qrCode: Helpers.generateQRCodeData(cardNumber, user.id),
+          isActive: true,
+          isProfileComplete: false,
         },
         { transaction }
       );
 
       await transaction.commit();
 
-      // Send welcome email
-      try {
-        await EmailService.sendWelcomeEmail(user);
-      } catch (emailError) {
-        logger.warn('Failed to send welcome email:', emailError);
-      }
+      logger.info(
+        `Step 1 signup completed with login access: ${emailOrNumber}`
+      );
 
-      logger.info(`User created by admin: ${user.email}`);
-
-      res
-        .status(201)
-        .json(ApiResponse.success(user, 'User created successfully'));
+      return res.status(201).json(
+        ApiResponse.success(
+          {
+            userId: user.id,
+            adminId: admin.id,
+            email: user.email,
+            phone: user.phone,
+            hasLoginAccess: true,
+            nextStep: 2,
+            message:
+              'Account created! Please complete your profile to get your Pravasi Privilege Card.',
+          },
+          'Step 1 completed successfully - You can now login'
+        )
+      );
     } catch (error) {
       await transaction.rollback();
-      logger.error('Create user error:', error);
+      logger.error('Signup Step 1 error:', error);
+      return res
+        .status(500)
+        .json(ApiResponse.error('Internal server error', 500));
+    }
+  }
+
+  /**
+   * Step 2: Complete profile and create privilege card
+   * POST /api/users/createProfile
+   */
+  static async createProfile(req, res) {
+    const transaction = await sequelize.transaction();
+
+    try {
+      const { userId, adminId, fullName, email, phone, location } = req.body;
+
+      // Find the incomplete user
+      const user = await User.findByPk(userId, {
+        attributes: { exclude: ['createdBy'] },
+      });
+      if (!user) {
+        await transaction.rollback();
+        return res.status(400).json(ApiResponse.error('User not found', 400));
+      }
+
+      if (user.isProfileComplete) {
+        await transaction.rollback();
+        return res
+          .status(400)
+          .json(ApiResponse.error('Profile already complete', 400));
+      }
+
+      // Check if new email/phone conflicts with existing users (excluding current user)
+      if (email && email !== user.email) {
+        const existingEmailUser = await User.findOne({
+          where: {
+            email: email.toLowerCase(),
+            id: { [Op.ne]: userId },
+          },
+          attributes: { exclude: ['createdBy'] },
+        });
+
+        const existingEmailAdmin = await Admin.findOne({
+          where: {
+            email: email.toLowerCase(),
+            id: { [Op.ne]: adminId },
+          },
+        });
+
+        if (existingEmailUser || existingEmailAdmin) {
+          await transaction.rollback();
+          return res
+            .status(400)
+            .json(ApiResponse.error('Email already exists', 400));
+        }
+      }
+
+      if (phone && phone !== user.phone) {
+        const existingPhoneUser = await User.findOne({
+          where: {
+            phone: phone,
+            id: { [Op.ne]: userId },
+          },
+          attributes: { exclude: ['createdBy'] },
+        });
+
+        const existingPhoneAdmin = await Admin.findOne({
+          where: {
+            phone: phone,
+            id: { [Op.ne]: adminId },
+          },
+        });
+
+        if (existingPhoneUser || existingPhoneAdmin) {
+          await transaction.rollback();
+          return res
+            .status(400)
+            .json(ApiResponse.error('Phone number already exists', 400));
+        }
+      }
+
+      // Update user with complete profile
+      const updateData = {
+        fullName: fullName.trim(),
+        email: email.toLowerCase().trim(),
+        phone: phone.trim(),
+        location: location.trim(),
+        isEmailVerified: true,
+        isPhoneVerified: true,
+        isProfileComplete: true,
+        registrationStep: 2,
+      };
+
+      await user.update(updateData, { transaction });
+
+      // Update existing admin entry with complete profile
+      const admin = await Admin.findOne({ where: { id: adminId } });
+      if (admin) {
+        await admin.update(
+          {
+            fullName: fullName.trim(),
+            email: email.toLowerCase().trim(),
+            phone: phone.trim(),
+          },
+          { transaction }
+        );
+      }
+
+      // Create Pravasi Privilege Card
+      const cardNumber = Helpers.generateCardNumber();
+      const expiryDate = new Date();
+      expiryDate.setFullYear(expiryDate.getFullYear() + 1);
+
+      const discountCard = await DiscountCard.create(
+        {
+          userId: user.id,
+          cardNumber,
+          expiryDate,
+          qrCode: Helpers.generateQRCodeData(cardNumber, user.id),
+          isActive: true,
+        },
+        { transaction }
+      );
+
+      await transaction.commit();
+
+      logger.info(`Registration completed: ${user.email}`);
+
+      res.status(201).json(
+        ApiResponse.success(
+          {
+            user: {
+              id: user.id,
+              fullName: user.fullName,
+              email: user.email,
+              phone: user.phone,
+            },
+            privilegeCard: {
+              cardNumber: discountCard.cardNumber,
+              expiryDate: discountCard.expiryDate,
+              qrCode: discountCard.qrCode,
+            },
+            loginAccount: {
+              role: admin.role,
+              isProfileComplete: true,
+            },
+          },
+          'Pravasi Privilege Card created successfully!'
+        )
+      );
+    } catch (error) {
+      await transaction.rollback();
+      logger.error('Create Privilege Card error:', error);
+      res.status(500).json(ApiResponse.error('Internal server error', 500));
+    }
+  }
+
+  /**
+   * Check user profile completion status after login
+   * GET /api/users/profile-status
+   */
+  static async getProfileStatus(req, res) {
+    try {
+      const { userId } = req.params; // Get from JWT token or session
+
+      const user = await User.findByPk(userId, {
+        include: [
+          {
+            model: DiscountCard,
+            as: 'discountCard',
+            attributes: ['cardNumber', 'expiryDate', 'isActive'],
+          },
+        ],
+        attributes: [
+          'id',
+          'fullName',
+          'email',
+          'phone',
+          'isProfileComplete',
+          'registrationStep',
+          'referralCode',
+        ],
+      });
+
+      if (!user) {
+        return res.status(404).json(ApiResponse.error('User not found', 404));
+      }
+
+      const admin = await Admin.findOne({
+        where: { userId: user.id },
+        attributes: ['isProfileComplete', 'role', 'permissions'],
+      });
+
+      const profileStatus = {
+        user: {
+          id: user.id,
+          fullName: user.fullName,
+          email: user.email,
+          phone: user.phone,
+          referralCode: user.referralCode,
+        },
+        status: {
+          isProfileComplete: user.isProfileComplete,
+          currentStep: user.registrationStep,
+          hasPrivilegeCard: !!user.discountCard,
+          needsProfileCompletion: !user.isProfileComplete,
+        },
+        loginAccount: {
+          role: admin?.role || 'user',
+          permissions: admin?.permissions || ['read'],
+          isProfileComplete: admin?.isProfileComplete || false,
+        },
+        privilegeCard: user.discountCard || null,
+        nextAction: user.isProfileComplete
+          ? 'profile_complete'
+          : 'complete_profile_and_get_card',
+      };
+
+      res.json(
+        ApiResponse.success(
+          profileStatus,
+          'Profile status retrieved successfully'
+        )
+      );
+    } catch (error) {
+      logger.error('Get profile status error:', error);
       res.status(500).json(ApiResponse.error('Internal server error', 500));
     }
   }

@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import Button from './ui/Button';
 import pravasiLogo from '../assets/images/pravasi-logo.png';
 import { ArrowLeft, Eye, EyeClosed, EyeOff } from 'lucide-react';
+import { usersAPI } from '../services/api';
 
-const SignupModal = ({ isOpen, onClose, onSwitchToLogin }) => {
+const SignupModal = ({ isOpen, onClose, onSwitchToLogin, onSignupSuccess }) => {
   const [formData, setFormData] = useState({
     emailOrNumber: '',
     newPassword: '',
@@ -75,19 +75,107 @@ const SignupModal = ({ isOpen, onClose, onSwitchToLogin }) => {
     onSwitchToLogin();
   };
 
-  const handleSubmit = () => {
-    // Add your signup logic here
-    console.log('Signup form submitted:', formData);
+  const validateForm = () => {
+    const newErrors = {};
+
+    if (!formData.emailOrNumber.trim()) {
+      newErrors.emailOrNumber = 'Email or phone number is required';
+    } else {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const phoneRegex = /^[0-9]{10,15}$/;
+
+      if (
+        !emailRegex.test(formData.emailOrNumber) &&
+        !phoneRegex.test(formData.emailOrNumber)
+      ) {
+        newErrors.emailOrNumber = 'Please enter a valid email or phone number';
+      }
+    }
+
+    if (!formData.newPassword) {
+      newErrors.newPassword = 'Password is required';
+    } else if (formData.newPassword.length < 8) {
+      newErrors.newPassword = 'Password must be at least 8 characters long';
+    }
+
+    if (!formData.confirmPassword) {
+      newErrors.confirmPassword = 'Please confirm your password';
+    } else if (formData.newPassword !== formData.confirmPassword) {
+      newErrors.confirmPassword = 'Passwords do not match';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  // const handleSubmit = async (e) => {
+  //   e.preventDefault();
+
+  //   onClose();
+  //   onSignupSuccess(3, {
+  //     email: 'test@gmail.com',
+  //     phone: '',
+  //     adminId: 3,
+  //   });
+  // };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (!validateForm()) {
+      return;
+    }
+
+    try {
+      const userData = {
+        emailOrNumber: formData.emailOrNumber,
+        password: formData.newPassword,
+      };
+
+      const response = await usersAPI.signUp(userData);
+
+      console.log('Signup successful:', response);
+
+      // Extract user ID from response (adjust based on your API response structure)
+      const userId = response.data?.id || response.id || response.userId;
+
+      // Close current modal and open next modal with user ID
+      onClose();
+
+      // Call the callback with user ID and any other needed data
+      if (onSignupSuccess) {
+        onSignupSuccess(userId, {
+          ...response.data, // Pass any additional user data
+        });
+      }
+    } catch (error) {
+      console.error('Signup failed:', error);
+
+      if (error.message.includes('409')) {
+        setErrors({
+          emailOrNumber: 'This email or phone number is already registered',
+        });
+      } else if (error.message.includes('400')) {
+        setErrors({
+          general: 'Invalid data provided. Please check your inputs.',
+        });
+      } else {
+        setErrors({
+          general: 'Signup failed. Please try again later.',
+        });
+      }
+    } finally {
+    }
   };
 
   if (!isOpen) return null;
 
   return (
     <div
-      className="fixed inset-0 flex items-center justify-center p-4 z-[9999] font-figtree min-h-screen overflow-y-auto"
+      className="fixed inset-0 flex items-center justify-center p-4 z-[9999] font-figtree overflow-y-auto"
       onClick={handleBackdropClick}
     >
-      <div className="bg-[#F5F5F5] rounded-3xl border-white border-4 shadow-2xl w-full max-w-lg mx-4 relative">
+      <div className="bg-[#F5F5F5] rounded-3xl border-white border-4 shadow-2xl w-full max-w-lg mx-4 relative  max-h-[90vh] overflow-y-auto">
         <div className="p-6">
           {/* Header with Back Button and Logo */}
           <div className="flex items-center justify-between">

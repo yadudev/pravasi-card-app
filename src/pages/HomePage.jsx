@@ -10,11 +10,18 @@ import BagBroken from '../assets/icons/BagBroken';
 import EarthBroken from '../assets/icons/EarthBroken';
 import KeyBroken from '../assets/icons/KeyBroken';
 import ShopRegistrationModal from '../components/ShopRegistrationModal';
+import SignupModal from '../components/SignUpModal';
+import LoginModal from '../components/LoginModal';
+import ActivateModal from '../components/ActivateModal';
 
 const HomePage = () => {
   const [activeCategory, setActiveCategory] = useState(0);
   const [currentPage, setCurrentPage] = useState(0);
   const [isShopModalOpen, setIsShopModalOpen] = useState(false);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [isSignupModalOpen, setIsSignupModalOpen] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [newUserData, setNewUserData] = useState(null);
 
   const categories = [
     { name: 'Shopping', iconName: 'Shopping', color: 'bg-[#1C1061]' },
@@ -45,6 +52,14 @@ const HomePage = () => {
     setActiveCategory(0);
   };
 
+  const handleSignupClick = () => {
+    setIsSignupModalOpen(true);
+  };
+
+  const handleCloseLoginModal = () => {
+    setIsLoginModalOpen(false);
+  };
+
   const prevCategory = () => {
     setCurrentPage((prevPage) => {
       const newPage = prevPage === 0 ? totalPages - 1 : prevPage - 1;
@@ -57,6 +72,32 @@ const HomePage = () => {
     setActiveCategory(index);
   };
 
+  const handleCloseSignupModal = () => {
+    setIsSignupModalOpen(false);
+  };
+
+  const handleLoginClick = () => {
+    setIsLoginModalOpen(true);
+  };
+
+  const handleSignupSuccess = (userId, userData) => {
+    console.log('User created with ID:', userId);
+    console.log('User data:', userData);
+
+    setNewUserData({
+      id: userId,
+      ...userData,
+    });
+
+    setShowProfileModal(true);
+  };
+
+  const handleCloseProfileModal = () => {
+    setShowProfileModal(false);
+    setNewUserData(null); 
+  };
+
+  
   const howItWorksSteps = [
     {
       step: 1,
@@ -194,7 +235,10 @@ const HomePage = () => {
                           'linear-gradient(177.36deg, #222158 -13.59%, rgba(34, 33, 88, 0) 50.99%)',
                       }}
                     >
-                      <button className="bg-sky-300 hover:bg-sky-200 font-semibold px-8 py-3 md:px-10 md:py-4 rounded-full flex items-center space-x-2 transition-colors duration-200">
+                      <button
+                        className="bg-sky-300 hover:bg-sky-200 font-semibold px-8 py-3 md:px-10 md:py-4 rounded-full flex items-center space-x-2 transition-colors duration-200"
+                        onClick={() => setIsSignupModalOpen(true)}
+                      >
                         <span className="text-[#222158] text-xl">
                           APPLY NOW
                         </span>
@@ -377,6 +421,29 @@ const HomePage = () => {
         isOpen={isShopModalOpen}
         onClose={() => setIsShopModalOpen(false)}
       />
+      {/* Signup Modal */}
+      <SignupModal
+        isOpen={isSignupModalOpen}
+        onClose={handleCloseSignupModal}
+        onSwitchToLogin={handleLoginClick}
+        onSignupSuccess={handleSignupSuccess}
+      />
+
+      {/* Login Modal */}
+      <LoginModal
+        isOpen={isLoginModalOpen}
+        onClose={handleCloseLoginModal}
+        onSwitchToSignup={handleSignupClick}
+      />
+
+       {showProfileModal && newUserData && (
+        <ActivateModal
+          isOpen={showProfileModal}
+          onClose={handleCloseProfileModal}
+          userId={newUserData.userId}
+          userData={newUserData}
+        />
+      )}
     </div>
   );
 };
