@@ -1,4 +1,3 @@
-// PrivilegeCard.jsx
 import React from 'react';
 
 const PrivilegeCard = () => {
@@ -17,47 +16,37 @@ const PrivilegeCard = () => {
           to use at partner shops.
         </p>
 
-        {/* Card Box */}
-        <div className="bg-white shadow-lg rounded-xl p-6 w-[340px] mx-auto mb-6">
-          <div className="border border-gray-200 rounded-xl p-4">
-            <div className="flex justify-between items-center mb-3">
-              <img
-                src="https://via.placeholder.com/80x20?text=PRAVASI"
-                alt="logo"
-                className="h-5"
-              />
-              <span className="text-sm font-semibold text-gray-700">
-                PRAVASI PREVILAGE CARD
-              </span>
-            </div>
+        <div className="bg-white rounded-xl shadow-md border mt-6 p-5 relative">
+          <div className="flex justify-between items-start">
+            <img src={'/pravasi-logo.png'} alt="Logo" className="h-15" />
+            <span className="text-sm font-medium text-gray-700">
+              PRAVASI PREVILAGE CARD
+            </span>
+          </div>
 
-            <div className="h-5 w-6 bg-gray-400 rounded-sm mb-4"></div>
-
-            <div className="text-2xl font-mono tracking-widest text-indigo-900 mb-3">
+          <div className="flex justify-start items-center mt-4">
+            <div className="w-10 h-8 bg-gray-300 rounded-sm mr-4"></div>
+            <span className="text-lg font-mono tracking-widest text-gray-800">
               1457-8321-0981-0000
-            </div>
+            </span>
+          </div>
 
-            <div className="flex justify-between text-sm text-gray-800 mb-3">
-              <span>Mick Gardy</span>
-              <span>12/4</span>
-            </div>
+          <div className="flex justify-between text-sm text-gray-700 mt-2">
+            <span>Mick Gardy</span>
+            <span>12/4</span>
+          </div>
 
-            <div className="bg-indigo-900 text-white text-sm py-2 px-4 rounded-b-xl flex justify-between items-center">
-              <span>www.discountcard.com</span>
-              <span className="flex items-center gap-1">
-                <input
-                  type="checkbox"
-                  checked
-                  readOnly
-                  className="accent-white"
-                />
-                Active
-              </span>
+          <div className="bg-indigo-900 text-white rounded-b-xl mt-4 px-4 py-2 flex justify-between items-center">
+            <a href="https://www.discountcard.com" className="text-sm">
+              www.discountcard.com
+            </a>
+            <div className="flex items-center">
+              <div className="w-3 h-3 rounded-full bg-white mr-2"></div>
+              <span className="text-sm">Active</span>
             </div>
           </div>
         </div>
 
-        {/* Activate Now Button */}
         <button className="bg-blue-200 text-blue-900 font-medium py-2 px-6 rounded-md hover:bg-blue-300 transition">
           Activate Now
         </button>
