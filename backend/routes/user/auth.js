@@ -1,14 +1,41 @@
 const express = require('express');
 const { body, param } = require('express-validator');
 const AuthController = require('../../controllers/admin/authController'); // Updated path
-const AuthMiddleware = require('../../middleware/auth');
+const UserAuthMiddleware = require('../../middleware/userAuth'); // User-specific middleware
 const ValidationMiddleware = require('../../middleware/validation');
 const UploadMiddleware = require('../../middleware/upload'); // Your existing upload middleware
 
-const router = express.Router();
+const userRouter = express.Router();
 
-// Admin login with rate limiting
-router.post(
+// User registration
+userRouter.post(
+  '/register',
+  [
+    body('email')
+      .isEmail()
+      .normalizeEmail()
+      .withMessage('Please provide a valid email address'),
+    body('password')
+      .isLength({ min: 8 })
+      .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
+      .withMessage(
+        'Password must be at least 8 characters with uppercase, lowercase, and number'
+      ),
+    body('fullName')
+      .isLength({ min: 2, max: 100 })
+      .withMessage('Full name must be between 2 and 100 characters'),
+    body('username')
+      .optional()
+      .isLength({ min: 3, max: 50 })
+      .isAlphanumeric()
+      .withMessage('Username must be 3-50 characters and alphanumeric only'),
+    ValidationMiddleware.validate,
+  ],
+  AuthController.register
+);
+
+// User login with rate limiting
+userRouter.post(
   '/login',
   AuthController.getLoginLimiter(), // Rate limiting middleware
   [
@@ -25,17 +52,17 @@ router.post(
       .withMessage('Remember me must be a boolean'),
     ValidationMiddleware.validate,
   ],
-  AuthController.adminLogin // Updated method name
+  AuthController.userLogin // Updated method name
 );
 
-// Get admin profile
-router.get('/profile', AuthMiddleware.authenticate, AuthController.getProfile);
+// Get user profile
+userRouter.get('/profile', UserAuthMiddleware.authenticate, AuthController.getProfile);
 
-// Update admin profile
-router.put(
+// Update user profile
+userRouter.put(
   '/profile',
   [
-    AuthMiddleware.authenticate,
+    UserAuthMiddleware.authenticate,
     body('fullName')
       .optional()
       .isLength({ min: 2, max: 100 })
@@ -49,16 +76,24 @@ router.put(
       .optional()
       .isString()
       .withMessage('Avatar must be a string'),
+    body('phone')
+      .optional()
+      .isMobilePhone()
+      .withMessage('Please provide a valid phone number'),
+    body('dateOfBirth')
+      .optional()
+      .isISO8601()
+      .withMessage('Please provide a valid date of birth'),
     ValidationMiddleware.validate,
   ],
   AuthController.updateProfile
 );
 
 // Change password
-router.put(
+userRouter.put(
   '/change-password',
   [
-    AuthMiddleware.authenticate,
+    UserAuthMiddleware.authenticate,
     body('currentPassword')
       .notEmpty()
       .withMessage('Current password is required'),
@@ -73,11 +108,11 @@ router.put(
   AuthController.changePassword
 );
 
-// Admin logout
-router.post('/logout', AuthMiddleware.authenticate, AuthController.logout);
+// User logout
+userRouter.post('/logout', UserAuthMiddleware.authenticate, AuthController.logout);
 
 // Refresh token
-router.post(
+userRouter.post(
   '/refresh-token',
   [
     body('refreshToken').notEmpty().withMessage('Refresh token is required'),
@@ -86,47 +121,25 @@ router.post(
   AuthController.refreshToken
 );
 
-// Get admin permissions
-router.get(
-  '/permissions',
-  AuthMiddleware.authenticate,
-  AuthController.getPermissions
-);
-
-// Check specific permission
-router.get(
-  '/permissions/check/:permission',
-  [
-    AuthMiddleware.authenticate,
-    param('permission')
-      .notEmpty()
-      .isString()
-      .withMessage('Permission parameter is required'),
-    ValidationMiddleware.validate,
-  ],
-  AuthController.checkPermission
-);
-
 // Forgot password with rate limiting
-router.post(
+userRouter.post(
   '/forgot-password',
   AuthController.getResetPasswordLimiter(), // Rate limiting middleware
   [
-    body('email')
-      .isEmail()
-      .normalizeEmail()
-      .withMessage('Please provide a valid email address'),
+    body('emailOrNumber')
+      .notEmpty()
+      .withMessage('Email or phone number is required'),
     body('userType')
       .optional()
-      .equals('admin')
-      .withMessage('User type must be admin for admin routes'),
+      .isIn(['user', 'admin'])
+      .withMessage('User type must be either user or admin'),
     ValidationMiddleware.validate,
   ],
   AuthController.forgotPassword
 );
 
 // Reset password
-router.post(
+userRouter.post(
   '/reset-password',
   [
     body('token')
@@ -141,17 +154,17 @@ router.post(
       ),
     body('userType')
       .optional()
-      .equals('admin')
-      .withMessage('User type must be admin for admin routes'),
+      .equals('user')
+      .withMessage('User type must be user for user routes'),
     ValidationMiddleware.validate,
   ],
   AuthController.resetPassword
 );
 
 // Upload avatar
-router.post(
+userRouter.post(
   '/upload-avatar',
-  AuthMiddleware.authenticate,
+  UserAuthMiddleware.authenticate,
   UploadMiddleware.imageUpload({
     destination: 'uploads/avatars',
     maxSize: 2 * 1024 * 1024, // 2MB for avatars
@@ -160,4 +173,4 @@ router.post(
   AuthController.uploadAvatar
 );
 
-module.exports = router
+module.exports = userRouter;

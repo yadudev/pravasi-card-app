@@ -1,43 +1,26 @@
 import React, { useState } from 'react';
-import {
-  X,
-  Upload,
-  MapPin,
-  Phone,
-  Mail,
-  User,
-  Building,
-  Globe,
-  Star,
-  Camera,
-  Check,
-  ArrowLeft,
-  ArrowRight,
-} from 'lucide-react';
+import { shopsAPI } from '../services/api';
 
 const ShopRegistrationModal = ({ isOpen, onClose }) => {
   const [currentStep, setCurrentStep] = useState(1);
+  const [isSubmitting, setIsSubmitting] = useState(false); // Add loading state
   const [formData, setFormData] = useState({
     // Step 1: Basic Information
     shopName: '',
-    ownerName: '',
+    category: '',
     email: '',
     phone: '',
-    category: '',
 
-    // Step 2: Location & Details
-    address: '',
-    city: '',
-    state: '',
-    pincode: '',
-    website: '',
-    description: '',
+    // Step 2: Location Details
+    district: '',
+    talukBlock: '',
+    location: '',
 
-    // Step 3: Verification & Agreement
-    businessLicense: null,
-    shopPhoto: null,
-    agreeTerms: false,
-    agreeMarketing: false,
+    // Step 3: Final Details
+    storeAddress: '',
+    gstNumber: '',
+    discountOffer: '',
+    confirmDetails: false,
   });
 
   const [errors, setErrors] = useState({});
@@ -50,39 +33,35 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
     }
   };
 
-  const handleFileUpload = (field, file) => {
-    setFormData((prev) => ({ ...prev, [field]: file }));
-    if (errors[field]) {
-      setErrors((prev) => ({ ...prev, [field]: '' }));
-    }
-  };
-
   const validateStep = (step) => {
     const newErrors = {};
 
     if (step === 1) {
       if (!formData.shopName.trim())
         newErrors.shopName = 'Store name is required';
+      if (!formData.category) newErrors.category = 'Category is required';
       if (!formData.email.trim())
         newErrors.email = 'Business email is required';
       else if (!/\S+@\S+\.\S+/.test(formData.email))
         newErrors.email = 'Email is invalid';
       if (!formData.phone.trim()) newErrors.phone = 'Phone number is required';
-      if (!formData.category) newErrors.category = 'Category is required';
     }
 
     if (step === 2) {
-      if (!formData.address.trim()) newErrors.address = 'Address is required';
-      if (!formData.city.trim()) newErrors.city = 'City is required';
-      if (!formData.state.trim()) newErrors.state = 'State is required';
-      if (!formData.pincode.trim()) newErrors.pincode = 'Pincode is required';
+      if (!formData.district) newErrors.district = 'District is required';
+      if (!formData.talukBlock)
+        newErrors.talukBlock = 'Taluk/Block is required';
+      if (!formData.location.trim())
+        newErrors.location = 'Location is required';
     }
 
     if (step === 3) {
-      if (!formData.businessLicense)
-        newErrors.businessLicense = 'Business license is required';
-      if (!formData.agreeTerms)
-        newErrors.agreeTerms = 'You must agree to terms and conditions';
+      if (!formData.storeAddress.trim())
+        newErrors.storeAddress = 'Store address is required';
+      if (!formData.gstNumber.trim())
+        newErrors.gstNumber = 'GST number is required';
+      if (!formData.confirmDetails)
+        newErrors.confirmDetails = 'You must confirm the details';
     }
 
     setErrors(newErrors);
@@ -95,23 +74,60 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
     }
   };
 
-  const prevStep = () => {
-    if (currentStep > 1) setCurrentStep(currentStep - 1);
-  };
-
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (validateStep(3)) {
-      // Handle form submission here
-      console.log('Form submitted:', formData);
+      setIsSubmitting(true); // Start loading
+      
+      try {
+        // Prepare the data to match your controller's expected fields
+        const registrationData = {
+          shopName: formData.shopName,
+          category: formData.category,
+          email: formData.email,
+          phone: formData.phone,
+          district: formData.district,
+          talukBlock: formData.talukBlock,
+          location: formData.location,
+          storeAddress: formData.storeAddress,
+          gstNumber: formData.gstNumber,
+          discountOffer: formData.discountOffer,
+          confirmDetails: formData.confirmDetails,
+        };
 
-      // Show success message or redirect
-      alert(
-        'Shop registration submitted successfully! We will review your application and get back to you within 2-3 business days.'
-      );
+        // Call the API
+        const response = await shopsAPI.registerShop(registrationData);
 
-      // Close modal and reset form
-      onClose();
-      resetForm();
+        if (response.success) {
+          // Show success message
+          alert(response.message || 'Shop registration submitted successfully! We will review your application and get back to you within 2-3 business days.');
+          
+          // Close modal and reset form
+          onClose();
+          resetForm();
+        } else {
+          // Handle API error response
+          alert(response.message || 'Registration failed. Please try again.');
+        }
+      } catch (error) {
+        console.error('Registration error:', error);
+        
+        // Handle different types of errors
+        let errorMessage = 'Registration failed. Please try again.';
+        
+        if (error.message.includes('400')) {
+          errorMessage = 'Please check your information and try again.';
+        } else if (error.message.includes('409') || error.message.includes('already exists')) {
+          errorMessage = 'A shop with this email already exists.';
+        } else if (error.message.includes('500')) {
+          errorMessage = 'Server error. Please try again later.';
+        } else if (error.message.includes('network') || error.message.includes('fetch')) {
+          errorMessage = 'Network error. Please check your connection and try again.';
+        }
+        
+        alert(errorMessage);
+      } finally {
+        setIsSubmitting(false); // Stop loading
+      }
     }
   };
 
@@ -119,28 +135,22 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
     setCurrentStep(1);
     setFormData({
       shopName: '',
-      ownerName: '',
+      category: '',
       email: '',
       phone: '',
-      category: '',
-      address: '',
-      city: '',
-      state: '',
-      pincode: '',
-      website: '',
-      description: '',
-      businessLicense: null,
-      shopPhoto: null,
-      agreeTerms: false,
-      agreeMarketing: false,
+      district: '',
+      talukBlock: '',
+      location: '',
+      storeAddress: '',
+      gstNumber: '',
+      discountOffer: '',
+      confirmDetails: false,
     });
     setErrors({});
   };
 
   const handleClose = () => {
     onClose();
-    // Optionally reset form on close
-    // resetForm();
   };
 
   if (!isOpen) return null;
@@ -160,96 +170,63 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
     'Education',
   ];
 
-  const FileUploadArea = ({
-    field,
-    accept,
-    title,
-    description,
-    icon: Icon,
-    file,
-  }) => (
-    <div>
-      <label className="block text-sm font-medium text-gray-700 mb-2">
-        {title} {field === 'businessLicense' && '*'}
-      </label>
-      <div
-        className={`border-2 border-dashed rounded-lg p-6 text-center hover:border-gray-400 transition-colors ${
-          errors[field] ? 'border-red-300 bg-red-50' : 'border-gray-300'
-        }`}
-      >
-        <Icon size={24} className="mx-auto mb-2 text-gray-400" />
-        <p className="text-sm text-gray-600 mb-2">{description}</p>
-        <input
-          type="file"
-          accept={accept}
-          onChange={(e) => handleFileUpload(field, e.target.files[0])}
-          className="hidden"
-          id={`${field}-upload`}
-        />
-        <label
-          htmlFor={`${field}-upload`}
-          className="inline-block px-4 py-2 bg-blue-500 text-white rounded-lg cursor-pointer hover:bg-blue-600 transition-colors"
-        >
-          Choose File
-        </label>
-        {file && <p className="mt-2 text-sm text-green-600">✓ {file.name}</p>}
-      </div>
-      {errors[field] && (
-        <p className="mt-1 text-sm text-red-600">{errors[field]}</p>
-      )}
-    </div>
-  );
+  const districts = [
+    'Thiruvananthapuram',
+    'Kollam',
+    'Pathanamthitta',
+    'Alappuzha',
+    'Kottayam',
+    'Idukki',
+    'Ernakulam',
+    'Thrissur',
+    'Palakkad',
+    'Malappuram',
+    'Kozhikode',
+    'Wayanad',
+    'Kannur',
+    'Kasaragod',
+  ];
 
-  const InputField = ({
-    label,
-    field,
-    type = 'text',
-    placeholder,
-    icon: Icon,
-    required = false,
-    ...props
-  }) => (
-    <div>
-      <label className="block text-sm font-medium text-gray-700 mb-2">
-        {Icon && <Icon size={16} className="inline mr-2" />}
-        {label} {required && '*'}
-      </label>
-      <input
-        type={type}
-        value={formData[field]}
-        onChange={(e) => handleInputChange(field, e.target.value)}
-        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
-          errors[field] ? 'border-red-300 bg-red-50' : 'border-gray-300'
-        }`}
-        placeholder={placeholder}
-        {...props}
-      />
-      {errors[field] && (
-        <p className="mt-1 text-sm text-red-600">{errors[field]}</p>
-      )}
-    </div>
-  );
+  const talukBlocks = [
+    'Thiruvananthapuram',
+    'Chirayinkeezhu',
+    'Neyyattinkara',
+    'Nedumangad',
+    'Varkala',
+    'Kollam',
+    'Karunagappally',
+    'Kottarakkara',
+    'Punalur',
+    'Pathanamthitta',
+    'Adoor',
+    'Kozhencherry',
+    'Ranni',
+    'Mallappally',
+  ];
 
   return (
     <div className="fixed inset-0 flex items-center justify-center z-[9999] p-4 font-figtree">
       <div className="bg-white rounded-2xl w-full max-w-3xl h-auto max-h-[90vh] overflow-y-auto shadow-2xl">
-         {/* Step Content */}
-        <div className="px-8 py-8">
-          {currentStep === 1 && (
-            <div className="space-y-6">
-              <div className="text-left mb-4">
-                <h3 className="text-2xl font-medium mb-3 text-black">
-                  Become a Partner Store
-                </h3>
-                <p className="text-[989898] text-sm font-medium">
-                  Join the Pravasi Privilege Network & attract loyal customers
-                  with exclusive card deals.
-                </p>
-              </div>
+        {/* Header */}
+        <div className="flex items-center justify-between px-8 py-4">
+          <div>
+            <h2 className="text-2xl font-medium text-black">
+              Become a Partner Store
+            </h2>
+            <p className="text-[#989898] text-sm font-medium mt-1">
+              Join the Pravasi Privilege Network & attract loyal customers with
+              exclusive card deals.
+            </p>
+          </div>
+        </div>
 
-              <div className="space-y-6 border border-[#3D3C96] p-6 rounded-xl">
+        {/* Step Content */}
+        <div className="px-8 py-2 mx-8 my-2 border border-[#3D3C96] p-6 rounded-xl">
+          {currentStep === 1 && (
+            <div className="space-y-6 py-4">
+              <div className="space-y-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                  <label className="block text-base font-semibold text-[#666666] mb-3">
                     Store Name*
                   </label>
                   <input
@@ -263,7 +240,8 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
                         ? 'border-red-300 bg-red-50'
                         : 'border-gray-300'
                     }`}
-                    placeholder="Type your Store name."
+                    placeholder="Type your store name"
+                    disabled={isSubmitting}
                   />
                   {errors.shopName && (
                     <p className="mt-2 text-sm text-red-600">
@@ -273,7 +251,7 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                  <label className="block text-base font-semibold text-[#666666] mb-3">
                     Categories*
                   </label>
                   <select
@@ -286,6 +264,7 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
                         ? 'border-red-300 bg-red-50'
                         : 'border-gray-300'
                     }`}
+                    disabled={isSubmitting}
                   >
                     <option value="">Select Category</option>
                     {categories.map((cat) => (
@@ -302,7 +281,7 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                  <label className="block text-base font-semibold text-[#666666] mb-3">
                     Business Email*
                   </label>
                   <input
@@ -315,6 +294,7 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
                         : 'border-gray-300'
                     }`}
                     placeholder="Type your email id"
+                    disabled={isSubmitting}
                   />
                   {errors.email && (
                     <p className="mt-2 text-sm text-red-600">{errors.email}</p>
@@ -322,7 +302,7 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                  <label className="block text-base font-semibold text-[#666666] mb-3">
                     Phone Number*
                   </label>
                   <input
@@ -335,6 +315,7 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
                         : 'border-gray-300'
                     }`}
                     placeholder="Type your phone number"
+                    disabled={isSubmitting}
                   />
                   {errors.phone && (
                     <p className="mt-2 text-sm text-red-600">{errors.phone}</p>
@@ -345,254 +326,225 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
           )}
 
           {currentStep === 2 && (
-            <div className="space-y-6">
-              <div className="text-center mb-6">
-                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <MapPin className="w-8 h-8 text-green-600" />
+            <div className="space-y-6 py-4">
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-base font-semibold text-[#666666] mb-3">
+                    District*
+                  </label>
+                  <select
+                    value={formData.district}
+                    onChange={(e) =>
+                      handleInputChange('district', e.target.value)
+                    }
+                    className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors text-base ${
+                      errors.district
+                        ? 'border-red-300 bg-red-50'
+                        : 'border-gray-300'
+                    }`}
+                    disabled={isSubmitting}
+                  >
+                    <option value="">Select District</option>
+                    {districts.map((district) => (
+                      <option key={district} value={district}>
+                        {district}
+                      </option>
+                    ))}
+                  </select>
+                  {errors.district && (
+                    <p className="mt-2 text-sm text-red-600">
+                      {errors.district}
+                    </p>
+                  )}
                 </div>
-                <h3 className="text-xl font-semibold mb-2">
-                  Location & Details
-                </h3>
-                <p className="text-gray-600">
-                  Provide your shop location and additional information
-                </p>
-              </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  <MapPin size={16} className="inline mr-2" />
-                  Shop Address *
-                </label>
-                <textarea
-                  value={formData.address}
-                  onChange={(e) => handleInputChange('address', e.target.value)}
-                  rows={3}
-                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
-                    errors.address
-                      ? 'border-red-300 bg-red-50'
-                      : 'border-gray-300'
-                  }`}
-                  placeholder="Enter complete shop address including building name, street, area"
-                />
-                {errors.address && (
-                  <p className="mt-1 text-sm text-red-600">{errors.address}</p>
-                )}
-              </div>
+                <div>
+                  <label className="block text-base font-semibold text-[#666666] mb-3">
+                    Taluk / Block*
+                  </label>
+                  <select
+                    value={formData.talukBlock}
+                    onChange={(e) =>
+                      handleInputChange('talukBlock', e.target.value)
+                    }
+                    className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors text-base ${
+                      errors.talukBlock
+                        ? 'border-red-300 bg-red-50'
+                        : 'border-gray-300'
+                    }`}
+                    disabled={isSubmitting}
+                  >
+                    <option value="">Select taluk</option>
+                    {talukBlocks.map((taluk) => (
+                      <option key={taluk} value={taluk}>
+                        {taluk}
+                      </option>
+                    ))}
+                  </select>
+                  {errors.talukBlock && (
+                    <p className="mt-2 text-sm text-red-600">
+                      {errors.talukBlock}
+                    </p>
+                  )}
+                </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <InputField
-                  label="City"
-                  field="city"
-                  placeholder="City"
-                  required
-                />
-
-                <InputField
-                  label="State"
-                  field="state"
-                  placeholder="State"
-                  required
-                />
-
-                <InputField
-                  label="Pincode"
-                  field="pincode"
-                  placeholder="Pincode"
-                  required
-                />
-              </div>
-
-              <InputField
-                label="Website"
-                field="website"
-                type="url"
-                placeholder="https://yourshop.com (optional)"
-                icon={Globe}
-              />
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Shop Description
-                </label>
-                <textarea
-                  value={formData.description}
-                  onChange={(e) =>
-                    handleInputChange('description', e.target.value)
-                  }
-                  rows={4}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                  placeholder="Describe your shop, products, services, and what makes you special. This will help customers find you."
-                />
-              </div>
-
-              <div className="bg-green-50 p-4 rounded-lg">
-                <p className="text-sm text-green-700">
-                  📍 <strong>Location Tip:</strong> Make sure your address is
-                  accurate. This will help customers locate your shop and verify
-                  your business.
-                </p>
+                <div>
+                  <label className="block text-base font-semibold text-[#666666] mb-3">
+                    Location*
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.location}
+                    onChange={(e) =>
+                      handleInputChange('location', e.target.value)
+                    }
+                    className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors text-base ${
+                      errors.location
+                        ? 'border-red-300 bg-red-50'
+                        : 'border-gray-300'
+                    }`}
+                    placeholder="Type your location"
+                    disabled={isSubmitting}
+                  />
+                  {errors.location && (
+                    <p className="mt-2 text-sm text-red-600">
+                      {errors.location}
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
           )}
 
           {currentStep === 3 && (
-            <div className="space-y-6">
-              <div className="text-center mb-6">
-                <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Star className="w-8 h-8 text-purple-600" />
-                </div>
-                <h3 className="text-xl font-semibold mb-2">
-                  Verification & Agreement
-                </h3>
-                <p className="text-gray-600">
-                  Upload documents and finalize your registration
-                </p>
-              </div>
-
+            <div className="space-y-6 py-4">
               <div className="space-y-6">
-                <FileUploadArea
-                  field="businessLicense"
-                  accept=".pdf,.jpg,.png,.jpeg"
-                  title="Business License/Registration"
-                  description="Upload business license, GST certificate, or shop registration document"
-                  icon={Upload}
-                  file={formData.businessLicense}
-                />
-
-                <FileUploadArea
-                  field="shopPhoto"
-                  accept=".jpg,.png,.jpeg"
-                  title="Shop Photo"
-                  description="Upload a clear photo of your shop (exterior/interior)"
-                  icon={Camera}
-                  file={formData.shopPhoto}
-                />
-              </div>
-
-              <div className="space-y-4 bg-gray-50 p-4 rounded-lg">
-                <h4 className="font-semibold text-gray-800">
-                  Terms & Agreements
-                </h4>
-
-                <label className="flex items-start space-x-3">
-                  <input
-                    type="checkbox"
-                    checked={formData.agreeTerms}
+                <div>
+                  <label className="block text-base font-semibold text-[#666666] mb-3">
+                    Store Address*
+                  </label>
+                  <textarea
+                    value={formData.storeAddress}
                     onChange={(e) =>
-                      handleInputChange('agreeTerms', e.target.checked)
+                      handleInputChange('storeAddress', e.target.value)
                     }
-                    className="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    rows={3}
+                    className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors text-base ${
+                      errors.storeAddress
+                        ? 'border-red-300 bg-red-50'
+                        : 'border-gray-300'
+                    }`}
+                    placeholder="Type your Store address"
+                    disabled={isSubmitting}
                   />
-                  <span className="text-sm text-gray-700">
-                    I agree to the{' '}
-                    <a
-                      href="#"
-                      className="text-blue-600 hover:underline font-medium"
-                    >
-                      Terms and Conditions
-                    </a>{' '}
-                    and{' '}
-                    <a
-                      href="#"
-                      className="text-blue-600 hover:underline font-medium"
-                    >
-                      Privacy Policy
-                    </a>{' '}
-                    *
-                  </span>
-                </label>
-                {errors.agreeTerms && (
-                  <p className="text-sm text-red-600 ml-6">
-                    {errors.agreeTerms}
-                  </p>
-                )}
+                  {errors.storeAddress && (
+                    <p className="mt-2 text-sm text-red-600">
+                      {errors.storeAddress}
+                    </p>
+                  )}
+                </div>
 
-                <label className="flex items-start space-x-3">
+                <div>
+                  <label className="block text-base font-semibold text-[#666666] mb-3">
+                    GST Number*
+                  </label>
                   <input
-                    type="checkbox"
-                    checked={formData.agreeMarketing}
+                    type="text"
+                    value={formData.gstNumber}
                     onChange={(e) =>
-                      handleInputChange('agreeMarketing', e.target.checked)
+                      handleInputChange('gstNumber', e.target.value)
                     }
-                    className="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors text-base ${
+                      errors.gstNumber
+                        ? 'border-red-300 bg-red-50'
+                        : 'border-gray-300'
+                    }`}
+                    placeholder="Type your GST number"
+                    disabled={isSubmitting}
                   />
-                  <span className="text-sm text-gray-700">
-                    I agree to receive marketing communications, promotional
-                    offers, and business updates
-                  </span>
-                </label>
-              </div>
+                  {errors.gstNumber && (
+                    <p className="mt-2 text-sm text-red-600">
+                      {errors.gstNumber}
+                    </p>
+                  )}
+                </div>
 
-              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                <h4 className="font-semibold text-blue-800 mb-3 flex items-center">
-                  <Check className="w-5 h-5 mr-2" />
-                  What happens next?
-                </h4>
-                <ul className="text-sm text-blue-700 space-y-2">
-                  <li className="flex items-start">
-                    <span className="w-2 h-2 bg-blue-400 rounded-full mt-2 mr-3 flex-shrink-0"></span>
-                    Your application will be reviewed within 2-3 business days
-                  </li>
-                  <li className="flex items-start">
-                    <span className="w-2 h-2 bg-blue-400 rounded-full mt-2 mr-3 flex-shrink-0"></span>
-                    You'll receive email confirmation once approved
-                  </li>
-                  <li className="flex items-start">
-                    <span className="w-2 h-2 bg-blue-400 rounded-full mt-2 mr-3 flex-shrink-0"></span>
-                    Access your merchant dashboard to create offers
-                  </li>
-                  <li className="flex items-start">
-                    <span className="w-2 h-2 bg-blue-400 rounded-full mt-2 mr-3 flex-shrink-0"></span>
-                    Start attracting Pravasi Card holders with exclusive
-                    discounts
-                  </li>
-                </ul>
+                <div>
+                  <label className="block text-base font-semibold text-[#666666] mb-3">
+                    Discount Offer You'd Like to Provide
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.discountOffer}
+                    onChange={(e) =>
+                      handleInputChange('discountOffer', e.target.value)
+                    }
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors text-base"
+                    placeholder="20% OFF on total bill"
+                    disabled={isSubmitting}
+                  />
+                </div>
+
+                <div className="mt-6">
+                  <label className="flex items-start space-x-3">
+                    <input
+                      type="checkbox"
+                      checked={formData.confirmDetails}
+                      onChange={(e) =>
+                        handleInputChange('confirmDetails', e.target.checked)
+                      }
+                      className="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      disabled={isSubmitting}
+                    />
+                    <span className="text-sm text-[#666666]">
+                      I confirm that the details above are accurate and agree to
+                      offer the mentioned discount to cardholders.
+                    </span>
+                  </label>
+                  {errors.confirmDetails && (
+                    <p className="mt-2 text-sm text-red-600 ml-6">
+                      {errors.confirmDetails}
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
           )}
-        </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-between p-6 border-t bg-white">
-          {currentStep > 1 ? (
-            <button
-              onClick={prevStep}
-              className="px-6 py-2 rounded-lg flex items-center space-x-2 transition-all text-gray-600 hover:bg-gray-100 border border-gray-300"
-            >
-              <ArrowLeft size={16} />
-              <span>Previous</span>
-            </button>
-          ) : (
-            <div></div>
-          )}
-
-          <div className="text-sm text-gray-500 font-medium">
-            {currentStep > 1 && `Step ${currentStep} of 3`}
+          {/* Footer */}
+          <div
+            className="w-full rounded-lg p-[1px] my-4"
+            style={{
+              background:
+                'linear-gradient(92.38deg, #222158 -21.33%, rgba(34, 33, 88, 0) 149.35%)',
+            }}
+          >
+            {currentStep < 3 ? (
+              <button
+                onClick={nextStep}
+                className="w-full bg-[#AFDCFF] text-[#222158] py-3 px-6 rounded-lg font-semibold text-base transition-all shadow-md hover:shadow-lg"
+                disabled={isSubmitting}
+              >
+                Next
+              </button>
+            ) : (
+              <button
+                onClick={handleSubmit}
+                disabled={!formData.confirmDetails || isSubmitting}
+                className={`w-full py-3 px-6 rounded-lg font-semibold text-base transition-all shadow-md hover:shadow-lg ${
+                  formData.confirmDetails && !isSubmitting
+                    ? 'bg-[#AFDCFF] text-[#222158]'
+                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                }`}
+              >
+                {isSubmitting ? 'Submitting...' : 'Submit'}
+              </button>
+            )}
           </div>
-
-          {currentStep < 3 ? (
-            <button
-              onClick={nextStep}
-              className="w-full max-w-sm bg-blue-500 text-white py-3 px-6 rounded-xl hover:bg-blue-600 transition-all shadow-md hover:shadow-lg font-medium text-base"
-            >
-              Next
-            </button>
-          ) : (
-            <button
-              onClick={handleSubmit}
-              disabled={!formData.agreeTerms}
-              className={`px-6 py-2 rounded-lg flex items-center space-x-2 transition-all shadow-md ${
-                formData.agreeTerms
-                  ? 'bg-green-500 text-white hover:bg-green-600 hover:shadow-lg'
-                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-              }`}
-            >
-              <span>Submit Application</span>
-              <Check size={16} />
-            </button>
-          )}
         </div>
       </div>
     </div>
   );
 };
+
 export default ShopRegistrationModal;

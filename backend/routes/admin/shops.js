@@ -9,13 +9,9 @@ const router = express.Router();
 router.post(
   '/register',
   [
-    body('name')
+    body('shopName')
       .isLength({ min: 2, max: 100 })
       .withMessage('Shop name must be between 2 and 100 characters')
-      .trim(),
-    body('ownerName')
-      .isLength({ min: 2, max: 100 })
-      .withMessage('Owner name must be between 2 and 100 characters')
       .trim(),
     body('email')
       .isEmail()
@@ -24,25 +20,11 @@ router.post(
     body('phone')
       .isMobilePhone('en-IN')
       .withMessage('Please provide a valid Indian mobile number'),
-    body('address')
-      .isLength({ min: 10, max: 500 })
-      .withMessage('Address must be between 10 and 500 characters')
+    body('storeAddress')
+      .isLength({ min: 2, max: 500 })
+      .withMessage('Address must be between 2 and 500 characters')
       .trim(),
-    body('category')
-      .isIn([
-        'Electronics',
-        'Fashion & Clothing',
-        'Food & Beverages',
-        'Books & Stationery',
-        'Health & Beauty',
-        'Sports & Fitness',
-        'Home & Garden',
-        'Automotive',
-        'Jewelry',
-        'General',
-      ])
-      .withMessage('Please select a valid category'),
-    body('discountOffered')
+    body('discountOffer')
       .isFloat({ min: 0, max: 100 })
       .withMessage('Discount offered must be between 0 and 100'),
     body('description')

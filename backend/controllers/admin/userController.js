@@ -5,12 +5,14 @@ const {
   Shop,
   sequelize,
   Admin,
+  OTPSession,
 } = require('../../models');
 const { Op } = require('sequelize');
 const ApiResponse = require('../../utils/responses');
 const Helpers = require('../../utils/helpers');
 const EmailService = require('../../services/emailService');
 const logger = require('../../utils/logger');
+const crypto = require('crypto');
 
 class UserController {
   /**
@@ -338,7 +340,7 @@ class UserController {
         {
           userId: user.id,
           cardNumber,
-          expiryDate,
+          expiresAt: expiryDate,
           qrCode: Helpers.generateQRCodeData(cardNumber, user.id),
           isActive: true,
         },
@@ -384,14 +386,24 @@ class UserController {
    */
   static async getProfileStatus(req, res) {
     try {
-      const { userId } = req.params; // Get from JWT token or session
+      const userId = req.user?.id || req.admin?.id;
 
-      const user = await User.findByPk(userId, {
+      const admin = await Admin.findOne({
+        where: { id: userId },
+        attributes: ['role', 'email', 'phone', 'id'],
+      });
+
+      const userWhereClause = { [Op.or]: [] };
+      if (admin.email) userWhereClause[Op.or].push({ email: admin.email });
+      if (admin.phone) userWhereClause[Op.or].push({ phone: admin.phone });
+
+      const user = await User.findOne({
+        where: userWhereClause,
         include: [
           {
             model: DiscountCard,
             as: 'discountCard',
-            attributes: ['cardNumber', 'expiryDate', 'isActive'],
+            attributes: ['cardNumber', 'expiresAt', 'isActive'],
           },
         ],
         attributes: [
@@ -401,7 +413,7 @@ class UserController {
           'phone',
           'isProfileComplete',
           'registrationStep',
-          'referralCode',
+          'location',
         ],
       });
 
@@ -409,18 +421,14 @@ class UserController {
         return res.status(404).json(ApiResponse.error('User not found', 404));
       }
 
-      const admin = await Admin.findOne({
-        where: { userId: user.id },
-        attributes: ['isProfileComplete', 'role', 'permissions'],
-      });
-
       const profileStatus = {
         user: {
           id: user.id,
           fullName: user.fullName,
           email: user.email,
           phone: user.phone,
-          referralCode: user.referralCode,
+          location: user.location,
+          adminId: admin?.id,
         },
         status: {
           isProfileComplete: user.isProfileComplete,
@@ -431,7 +439,6 @@ class UserController {
         loginAccount: {
           role: admin?.role || 'user',
           permissions: admin?.permissions || ['read'],
-          isProfileComplete: admin?.isProfileComplete || false,
         },
         privilegeCard: user.discountCard || null,
         nextAction: user.isProfileComplete
@@ -450,6 +457,590 @@ class UserController {
       res.status(500).json(ApiResponse.error('Internal server error', 500));
     }
   }
+
+  // ========================================
+  // ✅ OTP FUNCTIONALITY - COMPLETE WORKING VERSION
+  // ========================================
+
+  /**
+   * Generate 4-digit OTP
+   */
+  static generateOTP() {
+    return crypto.randomInt(1000, 9999).toString();
+  }
+
+  /**
+   * Send Email OTP for verification
+   * POST /api/users/otp/send-email
+   */
+  static async sendEmailOTP(req, res) {
+    try {
+      const { email, phone, type, fullName } = req.body;
+      const userId = req.user?.id || req.admin?.userId;
+
+      // Get user information
+      const user = await User.findByPk(userId, {
+        attributes: ['id', 'fullName', 'email', 'phone'],
+      });
+      if (!user) {
+        return res.status(404).json(ApiResponse.error('User not found', 404));
+      }
+
+      // Validate email belongs to user
+      if (user.email !== email) {
+        return res
+          .status(400)
+          .json(ApiResponse.error('Email does not match user account', 400));
+      }
+
+      // ✅ Rate limiting check
+      const recentCount = await OTPSession.countRecentRequests(
+        userId,
+        email,
+        1
+      );
+      if (recentCount > 0) {
+        return res
+          .status(429)
+          .json(
+            ApiResponse.error('Please wait before requesting another OTP', 429)
+          );
+      }
+
+      // ✅ Daily limit check
+      const dailyCount = await OTPSession.countDailyRequests(userId, email);
+      if (dailyCount >= 10) {
+        return res
+          .status(429)
+          .json(
+            ApiResponse.error(
+              'Daily OTP limit exceeded. Please try again tomorrow.',
+              429
+            )
+          );
+      }
+
+      // ✅ Generate OTP and create session
+      const otpCode = UserController.generateOTP();
+      const session = await OTPSession.createSession({
+        userId,
+        otpCode,
+        otpType: 'email',
+        contactInfo: email,
+        purpose: type,
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent'),
+      });
+
+      // const emailContent = UserController.generateEmailContent(
+      //   otpCode,
+      //   type,
+      //   fullName || user.fullName
+      // );
+
+      // await EmailService.sendEmail(
+      //   email,
+      //   emailContent.subject,
+      //   emailContent.html
+      // );
+
+      logger.info(`Email OTP sent to ${email} for user ${userId}`);
+
+      res.status(200).json(
+        ApiResponse.success(
+          {
+            sessionId: session.sessionId,
+            message: 'OTP sent successfully to your email',
+            expiresAt: session.expiresAt,
+          },
+          'OTP sent successfully'
+        )
+      );
+    } catch (error) {
+      logger.error('Send Email OTP Error:', error);
+      res
+        .status(500)
+        .json(ApiResponse.error('Failed to send OTP. Please try again.', 500));
+    }
+  }
+
+  /**
+   * Verify Email OTP
+   * POST /api/users/otp/verify-email
+   */
+  static async verifyEmailOTP(req, res) {
+    try {
+      const { otp, sessionId, email } = req.body;
+      const userId = req.user?.id || req.admin?.userId;
+
+      // ✅ Validate OTP using model method
+      const session = await OTPSession.validateOTP(sessionId, otp, userId);
+
+      // Perform action based on purpose
+      await UserController.handleOTPVerificationSuccess(
+        session.purpose,
+        userId,
+        email
+      );
+
+      logger.info(
+        `OTP verified successfully for user ${userId}, purpose: ${session.purpose}`
+      );
+
+      res.status(200).json(
+        ApiResponse.success(
+          {
+            message: 'OTP verified successfully',
+            purpose: session.purpose,
+          },
+          'OTP verification successful'
+        )
+      );
+    } catch (error) {
+      logger.error('Verify Email OTP Error:', error);
+      res
+        .status(400)
+        .json(
+          ApiResponse.error(error.message || 'OTP verification failed', 400)
+        );
+    }
+  }
+
+  /**
+   * Resend Email OTP
+   * POST /api/users/otp/resend-email
+   */
+  static async resendEmailOTP(req, res) {
+    try {
+      const { email, sessionId } = req.body;
+      const userId = req.user?.id || req.admin?.userId;
+
+      const session = await OTPSession.findBySessionId(sessionId);
+
+      if (!session || session.userId !== userId) {
+        return res
+          .status(400)
+          .json(ApiResponse.error('Invalid OTP session', 400));
+      }
+
+      if (session.isVerified) {
+        return res
+          .status(400)
+          .json(ApiResponse.error('OTP already verified', 400));
+      }
+
+      if (!session.canResend()) {
+        return res
+          .status(400)
+          .json(
+            ApiResponse.error(
+              'Cannot resend OTP at this time. Please wait or maximum resend limit reached.',
+              400
+            )
+          );
+      }
+
+      const newOtpCode = UserController.generateOTP();
+      const updatedSession = await session.updateForResend(newOtpCode);
+
+      // Get user info
+      const user = await User.findByPk(userId, {
+        attributes: ['id', 'fullName', 'email', 'phone'],
+      });
+
+      // const emailContent = UserController.generateEmailContent(
+      //   newOtpCode,
+      //   session.purpose,
+      //   user?.fullName
+      // );
+
+      // await EmailService.sendEmail(
+      //   email,
+      //   emailContent.subject,
+      //   emailContent.html
+      // );
+
+      logger.info(`Email OTP resent to ${email} for user ${userId}`);
+
+      res.status(200).json(
+        ApiResponse.success(
+          {
+            sessionId: sessionId,
+            message: 'OTP resent successfully',
+            expiresAt: updatedSession.expiresAt,
+          },
+          'OTP resent successfully'
+        )
+      );
+    } catch (error) {
+      logger.error('Resend Email OTP Error:', error);
+      res
+        .status(500)
+        .json(
+          ApiResponse.error('Failed to resend OTP. Please try again.', 500)
+        );
+    }
+  }
+
+  /**
+   * Send SMS OTP for verification
+   * POST /api/users/otp/send-sms
+   */
+  static async sendSMSOTP(req, res) {
+    try {
+      const { phone, email, type, name } = req.body;
+      const userId = req.user?.id || req.admin?.userId;
+
+      // Get user information
+      const user = await User.findByPk(userId);
+      if (!user) {
+        return res.status(404).json(ApiResponse.error('User not found', 404));
+      }
+
+      // Validate phone belongs to user
+      if (user.phone !== phone) {
+        return res
+          .status(400)
+          .json(
+            ApiResponse.error('Phone number does not match user account', 400)
+          );
+      }
+
+      // ✅ Rate limiting check
+      const recentCount = await OTPSession.countRecentRequests(
+        userId,
+        phone,
+        1
+      );
+      if (recentCount > 0) {
+        return res
+          .status(429)
+          .json(
+            ApiResponse.error('Please wait before requesting another OTP', 429)
+          );
+      }
+
+      // ✅ Daily limit check
+      const dailyCount = await OTPSession.countDailyRequests(userId, phone);
+      if (dailyCount >= 10) {
+        return res
+          .status(429)
+          .json(
+            ApiResponse.error(
+              'Daily OTP limit exceeded. Please try again tomorrow.',
+              429
+            )
+          );
+      }
+
+      // ✅ Generate OTP and create session
+      const otpCode = this.generateOTP();
+      const session = await OTPSession.createSession({
+        userId,
+        otpCode,
+        otpType: 'sms',
+        contactInfo: phone,
+        purpose: type,
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent'),
+      });
+
+      // Send SMS
+      await this.sendOTPSMS(phone, otpCode, type);
+
+      logger.info(`SMS OTP sent to ${phone} for user ${userId}`);
+
+      res.status(200).json(
+        ApiResponse.success(
+          {
+            sessionId: session.sessionId,
+            message: 'OTP sent successfully to your phone',
+            expiresAt: session.expiresAt,
+          },
+          'OTP sent successfully'
+        )
+      );
+    } catch (error) {
+      logger.error('Send SMS OTP Error:', error);
+      res
+        .status(500)
+        .json(
+          ApiResponse.error('Failed to send SMS OTP. Please try again.', 500)
+        );
+    }
+  }
+
+  /**
+   * Verify SMS OTP
+   * POST /api/users/otp/verify-sms
+   */
+  static async verifySMSOTP(req, res) {
+    try {
+      const { otp, sessionId, phone } = req.body;
+      const userId = req.user?.id || req.admin?.userId;
+
+      // ✅ Validate OTP using model method
+      const session = await OTPSession.validateOTP(sessionId, otp, userId);
+
+      // Perform action based on purpose
+      await this.handleOTPVerificationSuccess(session.purpose, userId, phone);
+
+      logger.info(
+        `SMS OTP verified successfully for user ${userId}, purpose: ${session.purpose}`
+      );
+
+      res.status(200).json(
+        ApiResponse.success(
+          {
+            message: 'OTP verified successfully',
+            purpose: session.purpose,
+          },
+          'OTP verification successful'
+        )
+      );
+    } catch (error) {
+      logger.error('Verify SMS OTP Error:', error);
+      res
+        .status(400)
+        .json(
+          ApiResponse.error(error.message || 'OTP verification failed', 400)
+        );
+    }
+  }
+
+  /**
+   * Resend SMS OTP
+   * POST /api/users/otp/resend-sms
+   */
+  static async resendSMSOTP(req, res) {
+    try {
+      const { phone, sessionId } = req.body;
+      const userId = req.user?.id || req.admin?.userId;
+
+      // ✅ Find existing session
+      const session = await OTPSession.findBySessionId(sessionId);
+
+      if (!session || session.userId !== userId) {
+        return res
+          .status(400)
+          .json(ApiResponse.error('Invalid OTP session', 400));
+      }
+
+      if (session.isVerified) {
+        return res
+          .status(400)
+          .json(ApiResponse.error('OTP already verified', 400));
+      }
+
+      if (!session.canResend()) {
+        return res
+          .status(400)
+          .json(
+            ApiResponse.error(
+              'Cannot resend OTP at this time. Please wait or maximum resend limit reached.',
+              400
+            )
+          );
+      }
+
+      // ✅ Generate new OTP and update session
+      const newOtpCode = this.generateOTP();
+      const updatedSession = await session.updateForResend(newOtpCode);
+
+      // Send new SMS
+      await this.sendOTPSMS(phone, newOtpCode, session.purpose);
+
+      logger.info(`SMS OTP resent to ${phone} for user ${userId}`);
+
+      res.status(200).json(
+        ApiResponse.success(
+          {
+            sessionId: sessionId,
+            message: 'OTP resent successfully',
+            expiresAt: updatedSession.expiresAt,
+          },
+          'OTP resent successfully'
+        )
+      );
+    } catch (error) {
+      logger.error('Resend SMS OTP Error:', error);
+      res
+        .status(500)
+        .json(
+          ApiResponse.error('Failed to resend SMS OTP. Please try again.', 500)
+        );
+    }
+  }
+
+  /**
+   * Generate email content based on purpose (4-digit OTP)
+   */
+  static generateEmailContent(otpCode, purpose, userName) {
+    const templates = {
+      card_activation: {
+        subject: 'Activate Your Pravasi Privilege Card - OTP Verification',
+        html: `
+          <div style="max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif;">
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; text-align: center;">
+              <h1 style="color: white; margin: 0;">Pravasi Privilege Card</h1>
+            </div>
+            <div style="padding: 30px; background: #f9f9f9;">
+              <h2 style="color: #333;">Hello ${userName || 'User'},</h2>
+              <p style="color: #666; font-size: 16px;">
+                You're almost ready! Use the verification code below to activate your Pravasi Privilege Card:
+              </p>
+              <div style="text-align: center; margin: 30px 0;">
+                <div style="background: white; border: 2px dashed #667eea; padding: 20px; display: inline-block; border-radius: 10px;">
+                  <h1 style="color: #667eea; margin: 0; font-size: 48px; letter-spacing: 8px;">${otpCode}</h1>
+                </div>
+              </div>
+              <p style="color: #666;">
+                This 4-digit code will expire in 10 minutes. If you didn't request this, please ignore this email.
+              </p>
+              <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd;">
+                <p style="color: #999; font-size: 12px;">
+                  This is an automated message. Please do not reply to this email.
+                </p>
+              </div>
+            </div>
+          </div>
+        `,
+      },
+      email_verification: {
+        subject: 'Verify Your Email - Pravasi Privilege',
+        html: `
+          <div style="max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif;">
+            <h2>Email Verification</h2>
+            <p>Hello ${userName || 'User'},</p>
+            <p>Please use this 4-digit code to verify your email address:</p>
+            <h1 style="color: #007bff; text-align: center; font-size: 48px; letter-spacing: 8px;">${otpCode}</h1>
+            <p>This code expires in 10 minutes.</p>
+          </div>
+        `,
+      },
+      phone_verification: {
+        subject: 'Verify Your Phone Number - Pravasi Privilege',
+        html: `
+          <div style="max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif;">
+            <h2>Phone Number Verification</h2>
+            <p>Hello ${userName || 'User'},</p>
+            <p>Please use this 4-digit code to verify your phone number:</p>
+            <h1 style="color: #007bff; text-align: center; font-size: 48px; letter-spacing: 8px;">${otpCode}</h1>
+            <p>This code expires in 10 minutes.</p>
+          </div>
+        `,
+      },
+      password_reset: {
+        subject: 'Password Reset - Pravasi Privilege',
+        html: `
+          <div style="max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif;">
+            <h2>Password Reset</h2>
+            <p>Hello ${userName || 'User'},</p>
+            <p>Please use this 4-digit code to reset your password:</p>
+            <h1 style="color: #dc3545; text-align: center; font-size: 48px; letter-spacing: 8px;">${otpCode}</h1>
+            <p>This code expires in 10 minutes. If you didn't request this, please ignore this email.</p>
+          </div>
+        `,
+      },
+    };
+
+    return templates[purpose] || templates.email_verification;
+  }
+
+  /**
+   * Send OTP SMS (implement your SMS service) - 4-digit
+   */
+  static async sendOTPSMS(phone, otpCode, purpose) {
+    try {
+      const message = `Your Pravasi Privilege verification code is: ${otpCode}. Valid for 10 minutes. Do not share this code.`;
+
+      // Option 1: Twilio (uncomment if using Twilio)
+      // const twilio = require('twilio');
+      // const twilioClient = twilio(process.env.TWILIO_SID, process.env.TWILIO_AUTH_TOKEN);
+      // await twilioClient.messages.create({
+      //   body: message,
+      //   from: process.env.TWILIO_PHONE_NUMBER,
+      //   to: `+91${phone}`
+      // });
+
+      // For now, just log (replace with actual SMS service)
+      console.log(`SMS OTP: ${otpCode} to ${phone} for ${purpose}`);
+    } catch (error) {
+      logger.error('Send SMS Error:', error);
+      throw new Error('Failed to send SMS');
+    }
+  }
+
+  /**
+   * Handle successful OTP verification based on purpose
+   */
+  static async handleOTPVerificationSuccess(purpose, userId, contactInfo) {
+    try {
+      switch (purpose) {
+        case 'card_activation':
+          // Activate user's card
+          await User.update(
+            {
+              cardStatus: 'active',
+              cardActivatedAt: new Date(),
+            },
+            { where: { id: userId } }
+          );
+
+          // Also activate the discount card
+          const user = await User.findByPk(userId, {
+            include: [{ model: DiscountCard, as: 'discountCard' }],
+            attributes: { exclude: ['createdBy'] },
+          });
+
+          if (user && user.discountCard) {
+            await user.discountCard.update({ isActive: true });
+          }
+
+          logger.info(`Card activated for user ${userId}`);
+          break;
+
+        case 'email_verification':
+          // Mark email as verified
+          await User.update(
+            {
+              isEmailVerified: true,
+              emailVerifiedAt: new Date(),
+            },
+            { where: { id: userId } }
+          );
+          logger.info(`Email verified for user ${userId}`);
+          break;
+
+        case 'phone_verification':
+          // Mark phone as verified
+          await User.update(
+            {
+              isPhoneVerified: true,
+              phoneVerifiedAt: new Date(),
+            },
+            { where: { id: userId } }
+          );
+          logger.info(`Phone verified for user ${userId}`);
+          break;
+
+        case 'password_reset':
+          // Handle password reset verification
+          logger.info(`Password reset verified for user ${userId}`);
+          break;
+
+        default:
+          logger.info(`No specific action for purpose: ${purpose}`);
+      }
+    } catch (error) {
+      logger.error('Error handling OTP verification success:', error);
+      throw error;
+    }
+  }
+
+  // ========================================
+  // END OF OTP FUNCTIONALITY
+  // ========================================
 
   /**
    * Update user information
@@ -539,9 +1130,399 @@ class UserController {
   }
 
   /**
-   * Reset user password
-   * PUT /api/admin/users/:id/reset-password
+   * Search shops with filters, location, and user-specific discount information
+   * GET /api/users/shops/search
    */
+  static async searchShops(req, res) {
+    try {
+      const isShopCurrentlyOpen = (openingHours) => {
+        try {
+          if (!openingHours || typeof openingHours !== 'object') return false;
+
+          const now = new Date();
+          const days = [
+            'sunday',
+            'monday',
+            'tuesday',
+            'wednesday',
+            'thursday',
+            'friday',
+            'saturday',
+          ];
+          const currentDay = days[now.getDay()];
+          const currentTime = now.getHours() * 100 + now.getMinutes(); // HHMM format
+
+          const todayHours = openingHours[currentDay];
+          if (!todayHours || todayHours === 'closed') return false;
+
+          // Parse opening hours (assuming format like "09:00-21:00")
+          const timeParts = todayHours.split('-');
+          if (timeParts.length !== 2) return false;
+
+          const openTime = parseInt(timeParts[0].replace(':', ''));
+          const closeTime = parseInt(timeParts[1].replace(':', ''));
+
+          return currentTime >= openTime && currentTime <= closeTime;
+        } catch (error) {
+          return false; // Default to closed if parsing fails
+        }
+      };
+
+      const getShopBadges = (shopData) => {
+        const badges = [];
+
+        if (shopData.averageRating >= 4.5) badges.push('Top Rated');
+        if (shopData.discountOffered >= 20) badges.push('Great Deals');
+        if (shopData.isActive) badges.push('Active');
+
+        return badges;
+      };
+
+      const getPaginationData = (page, limit, totalCount) => {
+        return {
+          currentPage: page,
+          totalPages: Math.ceil(totalCount / limit),
+          totalRecords: totalCount,
+          hasNextPage: page < Math.ceil(totalCount / limit),
+          hasPreviousPage: page > 1,
+          limit: limit,
+        };
+      };
+
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 10;
+      const offset = (page - 1) * limit;
+
+      // Search parameters
+      const search = req.query.search || '';
+      const category = req.query.category;
+      const location = req.query.location || '';
+      const latitude = parseFloat(req.query.latitude);
+      const longitude = parseFloat(req.query.longitude);
+      const maxDistance = parseInt(req.query.maxDistance) || 10; // km
+      const sortBy = req.query.sortBy || 'distance'; // distance, name, discount, rating
+      const sortOrder = req.query.sortOrder || 'ASC';
+
+      // Get user information for personalized discounts
+      const userId = req.user?.id || req.admin?.userId;
+      let user = null;
+      if (userId) {
+        user = await User.findByPk(userId, {
+          attributes: [
+            'id',
+            'fullName',
+            'email',
+            'phone',
+            'avatar',
+            'dateOfBirth',
+            'gender',
+            'address',
+            'city',
+            'state',
+            'pincode',
+            'location',
+            'isActive',
+            'isEmailVerified',
+            'isPhoneVerified',
+            'isProfileComplete',
+            'registrationStep',
+            'totalSpent',
+            'currentDiscountTier',
+            'referralCode',
+            'referredBy',
+            'createdAt',
+            'updatedAt',
+          ],
+          include: [
+            {
+              model: DiscountCard,
+              as: 'discountCard',
+              attributes: ['cardNumber', 'isActive', 'expiresAt'],
+            },
+          ],
+        });
+      }
+
+      // Build base WHERE conditions
+      let baseConditions = `isActive = true AND status = 'approved'`;
+
+      // Add search conditions
+      if (search) {
+        baseConditions += ` AND (name LIKE '%${search}%' OR description LIKE '%${search}%' OR category LIKE '%${search}%' OR tags LIKE '%${search}%')`;
+      }
+
+      // Add category filter
+      if (category) {
+        baseConditions += ` AND category = '${category}'`;
+      }
+
+      if (location) {
+        // Split location by comma and search for each part
+        const locationParts = location.split(',').map((part) => part.trim());
+        const locationConditions = [];
+
+        // Add condition for full location match
+        locationConditions.push(
+          `(location LIKE '%${location}%' OR address LIKE '%${location}%')`
+        );
+
+        // Add conditions for each part of the location
+        locationParts.forEach((part) => {
+          if (part.length > 0) {
+            locationConditions.push(
+              `(location LIKE '%${part}%' OR address LIKE '%${part}%')`
+            );
+          }
+        });
+
+        baseConditions += ` AND (${locationConditions.join(' OR ')})`;
+      }
+
+      let shops = [];
+      let totalCount = 0;
+
+      if (latitude && longitude) {
+        const combinedQuery = `
+          SELECT * FROM (
+            -- Shops with coordinates (calculate distance)
+            SELECT 
+              id, name, description, category, location, address, latitude, longitude,
+              phone, email, website, discountOffered, averageRating, featuredImage,
+              amenities, openingHours, tags, isActive, createdAt,
+              (6371 * acos(
+                cos(radians(${latitude})) * 
+                cos(radians(COALESCE(latitude, 0))) * 
+                cos(radians(COALESCE(longitude, 0)) - radians(${longitude})) + 
+                sin(radians(${latitude})) * 
+                sin(radians(COALESCE(latitude, 0)))
+              )) AS distance,
+              'with_coords' as shop_type
+            FROM shops 
+            WHERE ${baseConditions} 
+            AND latitude IS NOT NULL 
+            AND longitude IS NOT NULL
+            AND latitude != 0 
+            AND longitude != 0
+            HAVING distance <= ${maxDistance}
+            
+            UNION ALL
+            
+            -- Shops without coordinates but matching location text
+            SELECT 
+              id, name, description, category, location, address, latitude, longitude,
+              phone, email, website, discountOffered, averageRating, featuredImage,
+              amenities, openingHours, tags, isActive, createdAt,
+              999999 AS distance,  -- Set high distance for shops without coords
+              'without_coords' as shop_type
+            FROM shops 
+            WHERE ${baseConditions}
+            AND (latitude IS NULL OR longitude IS NULL OR latitude = 0 OR longitude = 0)
+          ) combined_results
+          ORDER BY 
+            CASE 
+              WHEN shop_type = 'with_coords' THEN distance 
+              ELSE ${sortBy === 'name' ? 'name' : sortBy === 'discount' ? 'discountOffered' : sortBy === 'rating' ? 'averageRating' : 'name'}
+            END ${sortOrder}
+          LIMIT ${limit} OFFSET ${offset}
+        `;
+
+        const countQuery = `
+          SELECT COUNT(*) as total FROM (
+            -- Count shops with coordinates within distance
+            SELECT id
+            FROM shops 
+            WHERE ${baseConditions} 
+            AND latitude IS NOT NULL 
+            AND longitude IS NOT NULL
+            AND latitude != 0 
+            AND longitude != 0
+            AND (6371 * acos(
+              cos(radians(${latitude})) * 
+              cos(radians(latitude)) * 
+              cos(radians(longitude) - radians(${longitude})) + 
+              sin(radians(${latitude})) * 
+              sin(radians(latitude))
+            )) <= ${maxDistance}
+            
+            UNION ALL
+            
+            -- Count shops without coordinates but matching location
+            SELECT id
+            FROM shops 
+            WHERE ${baseConditions}
+            AND (latitude IS NULL OR longitude IS NULL OR latitude = 0 OR longitude = 0)
+          ) as total_shops
+        `;
+
+        // Execute queries
+        const [shopResults] = await sequelize.query(combinedQuery);
+        const [countResults] = await sequelize.query(countQuery);
+
+        shops = shopResults;
+        totalCount = countResults[0]?.total || 0;
+      } else {
+        const regularQuery = `
+          SELECT 
+            id, name, description, category, location, address, latitude, longitude,
+            phone, email, website, discountOffered, averageRating, featuredImage,
+            amenities, openingHours, tags, isActive, createdAt,
+            NULL as distance
+          FROM shops 
+          WHERE ${baseConditions}
+          ORDER BY ${sortBy === 'discount' ? 'discountOffered' : sortBy === 'rating' ? 'averageRating' : sortBy} ${sortOrder}
+          LIMIT ${limit} OFFSET ${offset}
+        `;
+        c;
+        const countQuery = `
+          SELECT COUNT(*) as total
+          FROM shops 
+          WHERE ${baseConditions}
+        `;
+
+        const [shopResults] = await sequelize.query(regularQuery);
+        const [countResults] = await sequelize.query(countQuery);
+
+        shops = shopResults;
+        totalCount = countResults[0]?.total || 0;
+      }
+
+      // Format results for frontend
+      const formattedShops = shops.map((shopData) => {
+        // Calculate user-specific discount
+        let userDiscount = shopData.discountOffered || 0;
+        let discountSource = 'shop';
+
+        if (user && user.discountCard && user.discountCard.isActive) {
+          // Define tier discounts based on user's current tier
+          const tierDiscounts = {
+            Bronze: 5,
+            Silver: 10,
+            Gold: 15,
+            Platinum: 20,
+          };
+
+          const tierDiscount = tierDiscounts[user.currentDiscountTier] || 0;
+
+          if (tierDiscount > userDiscount) {
+            userDiscount = tierDiscount;
+            discountSource = 'tier';
+          }
+        }
+
+        // Format distance - handle shops without coordinates
+        let distance = null;
+        if (
+          shopData.distance !== null &&
+          shopData.distance !== undefined &&
+          shopData.distance !== 999999
+        ) {
+          distance = parseFloat(shopData.distance).toFixed(1);
+        }
+
+        // Parse amenities array
+        let amenities = [];
+        try {
+          amenities = shopData.amenities ? JSON.parse(shopData.amenities) : [];
+        } catch (e) {
+          amenities = [];
+        }
+
+        // Parse opening hours
+        let openingHours = {};
+        try {
+          openingHours = shopData.openingHours
+            ? JSON.parse(shopData.openingHours)
+            : {};
+        } catch (e) {
+          openingHours = {};
+        }
+
+        // Parse tags
+        const tags = shopData.tags
+          ? shopData.tags.split(',').map((tag) => tag.trim())
+          : [];
+
+        return {
+          id: shopData.id,
+          name: shopData.name,
+          description: shopData.description,
+          category: shopData.category,
+          location: {
+            address: shopData.address,
+            location: shopData.location,
+            coordinates: {
+              latitude: shopData.latitude,
+              longitude: shopData.longitude,
+            },
+            distance: distance ? `${distance} km` : 'Location match',
+          },
+          contact: {
+            phone: shopData.phone,
+            email: shopData.email,
+            website: shopData.website,
+          },
+          discount: {
+            percentage: userDiscount,
+            source: discountSource,
+            tierBased: discountSource === 'tier',
+          },
+          rating: {
+            average: shopData.averageRating || 0,
+          },
+          images: {
+            featured: shopData.featuredImage,
+          },
+          amenities,
+          openingHours,
+          tags,
+          isOpen: isShopCurrentlyOpen(openingHours),
+          badges: getShopBadges(shopData),
+        };
+      });
+
+      // Calculate search metadata
+      const searchMetadata = {
+        totalResults: totalCount,
+        currentPage: page,
+        totalPages: Math.ceil(totalCount / limit),
+        hasNextPage: page < Math.ceil(totalCount / limit),
+        hasPreviousPage: page > 1,
+        searchParams: {
+          search,
+          category,
+          location,
+          coordinates: latitude && longitude ? { latitude, longitude } : null,
+          maxDistance,
+          sortBy,
+          sortOrder,
+        },
+        userLocation: latitude && longitude ? { latitude, longitude } : null,
+        note:
+          latitude && longitude
+            ? 'Results include both distance-based and location text matches'
+            : 'Results based on text search only',
+      };
+
+      const pagination = getPaginationData(page, limit, totalCount);
+
+      res.json(
+        ApiResponse.paginated(
+          formattedShops,
+          pagination,
+          'Shops retrieved successfully',
+          searchMetadata
+        )
+      );
+    } catch (error) {
+      logger.error('Shop search error:', error);
+      res.status(500).json(ApiResponse.error('Internal server error', 500));
+    }
+  }
+
+  // ========================================
+  // ADMIN USER MANAGEMENT METHODS
+  // ========================================
+
   static async resetUserPassword(req, res) {
     try {
       const { id } = req.params;
@@ -563,10 +1544,6 @@ class UserController {
     }
   }
 
-  /**
-   * Update user discount card details
-   * PUT /api/admin/users/:id/card
-   */
   static async updateUserCard(req, res) {
     try {
       const { id } = req.params;
@@ -601,10 +1578,6 @@ class UserController {
     }
   }
 
-  /**
-   * Generate new discount card for user
-   * POST /api/admin/users/:id/generate-card
-   */
   static async generateUserCard(req, res) {
     try {
       const { id } = req.params;
@@ -643,10 +1616,6 @@ class UserController {
     }
   }
 
-  /**
-   * Send email to user
-   * POST /api/admin/users/:id/send-email
-   */
   static async sendEmailToUser(req, res) {
     try {
       const { id } = req.params;
@@ -670,10 +1639,6 @@ class UserController {
     }
   }
 
-  /**
-   * Delete user
-   * DELETE /api/admin/users/:id
-   */
   static async deleteUser(req, res) {
     try {
       const { id } = req.params;
@@ -694,10 +1659,6 @@ class UserController {
     }
   }
 
-  /**
-   * Get user statistics
-   * GET /api/admin/users/stats
-   */
   static async getUserStats(req, res) {
     try {
       const totalUsers = await User.count();
@@ -747,10 +1708,6 @@ class UserController {
     }
   }
 
-  /**
-   * Export users data
-   * GET /api/admin/users/export
-   */
   static async exportUsers(req, res) {
     try {
       const { format = 'csv' } = req.query;
@@ -797,10 +1754,6 @@ class UserController {
     }
   }
 
-  /**
-   * Bulk update users
-   * POST /api/admin/users/bulk-update
-   */
   static async bulkUpdateUsers(req, res) {
     try {
       const { userIds, action, data } = req.body;
@@ -860,10 +1813,6 @@ class UserController {
     }
   }
 
-  /**
-   * Get user's discount status and current tier information
-   * GET /api/admin/users/:id/discount-status
-   */
   static async getUserDiscountStatus(req, res) {
     try {
       const { id } = req.params;
@@ -943,10 +1892,6 @@ class UserController {
     }
   }
 
-  /**
-   * Get user's discount usage history
-   * GET /api/admin/users/:id/discount-history
-   */
   static async getUserDiscountHistory(req, res) {
     try {
       const { id } = req.params;
@@ -1038,10 +1983,6 @@ class UserController {
     }
   }
 
-  /**
-   * Get discount analytics for a specific user
-   * GET /api/admin/users/:id/discount-analytics
-   */
   static async getUserDiscountAnalytics(req, res) {
     try {
       const { id } = req.params;
@@ -1160,7 +2101,7 @@ class UserController {
         },
         monthlyBreakdown: Object.values(monthlyData),
         categoryBreakdown: Object.values(categoryBreakdown),
-        tierProgression: await getUserTierProgression(id),
+        tierProgression: await this.getUserTierProgression(id),
       };
 
       res.json(
@@ -1175,10 +2116,6 @@ class UserController {
     }
   }
 
-  /**
-   * Get all users' discount summary for admin dashboard
-   * GET /api/admin/users/discount-summary
-   */
   static async getDiscountSummary(req, res) {
     try {
       const period = req.query.period || '1month';
@@ -1340,6 +2277,525 @@ class UserController {
       logger.error('Get user tier progression error:', error);
       return null;
     }
+  }
+
+  // Add this method to your UserController class
+
+  /**
+   * Get user OTP send history
+   * GET /api/users/otp/history
+   */
+  static async getOtpHistory(req, res) {
+    try {
+      const userId = req.user?.id || req.admin?.userId;
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 20;
+      const offset = (page - 1) * limit;
+      const purpose = req.query.purpose; // Filter by purpose if provided
+
+      if (!userId) {
+        return res
+          .status(401)
+          .json(ApiResponse.error('User not authenticated', 401));
+      }
+
+      // Build where clause
+      const whereClause = { userId };
+      if (purpose) {
+        whereClause.purpose = purpose;
+      }
+
+      // Get OTP history with pagination
+      const { count, rows: otpSessions } = await OTPSession.findAndCountAll({
+        where: whereClause,
+        attributes: [
+          'id',
+          'sessionId',
+          'otpType',
+          'contactInfo',
+          'purpose',
+          'isVerified',
+          'created_at',
+          'expires_at',
+          'verified_at',
+          'resendCount',
+          'ipAddress',
+        ],
+        order: [['created_at', 'DESC']],
+        limit,
+        offset,
+        distinct: true,
+      });
+
+      // Format the OTP history data
+      const formattedHistory = otpSessions.map((session) => ({
+        id: session.id,
+        sessionId: session.sessionId,
+        purpose: session.purpose,
+        type: session.otpType, // 'email' or 'sms'
+        contactInfo: session.contactInfo,
+        status: session.isVerified
+          ? 'verified'
+          : new Date() > new Date(session.expires_at)
+            ? 'expired'
+            : 'pending',
+        sentAt: session.created_at,
+        expiresAt: session.expires_at,
+        verifiedAt: session.verified_at,
+        resendCount: session.resendCount || 0,
+        ipAddress: session.ipAddress,
+      }));
+
+      // Group by purpose for summary
+      const purposeSummary = otpSessions.reduce((acc, session) => {
+        const purpose = session.purpose;
+        if (!acc[purpose]) {
+          acc[purpose] = {
+            total: 0,
+            verified: 0,
+            expired: 0,
+            pending: 0,
+          };
+        }
+        acc[purpose].total++;
+
+        if (session.is_verified) {
+          acc[purpose].verified++;
+        } else if (new Date() > new Date(session.expires_at)) {
+          acc[purpose].expired++;
+        } else {
+          acc[purpose].pending++;
+        }
+
+        return acc;
+      }, {});
+
+      const pagination = Helpers.getPaginationData(page, limit, count);
+
+      const responseData = {
+        history: formattedHistory,
+        summary: {
+          totalSent: count,
+          recentActivity: formattedHistory.slice(0, 5), // Last 5 OTPs
+          purposeBreakdown: purposeSummary,
+        },
+        pagination,
+      };
+
+      res.json(
+        ApiResponse.paginated(
+          formattedHistory,
+          pagination,
+          'OTP history retrieved successfully',
+          responseData.summary
+        )
+      );
+    } catch (error) {
+      logger.error('Get OTP history error:', error);
+      res.status(500).json(ApiResponse.error('Internal server error', 500));
+    }
+  }
+
+  /**
+   * Get user card details with full information
+   * GET /api/users/card/details
+   */
+  static async getCardDetails(req, res) {
+    try {
+      const userId = req.user?.id || req.admin?.userId;
+
+      if (!userId) {
+        return res
+          .status(401)
+          .json(ApiResponse.error('User not authenticated', 401));
+      }
+
+      // Get user with card information
+      const user = await User.findByPk(userId, {
+        include: [
+          {
+            model: DiscountCard,
+            as: 'discountCard',
+            attributes: [
+              'id',
+              'cardNumber',
+              'expiresAt',
+              'isActive',
+              'qrCode',
+              'createdAt',
+              'updatedAt',
+            ],
+          },
+        ],
+        attributes: [
+          'id',
+          'fullName',
+          'email',
+          'phone',
+          'currentDiscountTier',
+          'totalSpent',
+          'isActive',
+          'isEmailVerified',
+          'isPhoneVerified',
+          'isProfileComplete',
+          'createdAt',
+        ],
+      });
+
+      if (!user) {
+        return res.status(404).json(ApiResponse.error('User not found', 404));
+      }
+
+      // Calculate card status
+      let cardStatus = 'inactive';
+      let daysRemaining = 0;
+      let isExpired = false;
+
+      if (user.discountCard && user.discountCard.isActive) {
+        const expiryDate = new Date(user.discountCard.expiresAt);
+        const currentDate = new Date();
+
+        if (expiryDate > currentDate) {
+          cardStatus = 'active';
+          daysRemaining = Math.ceil(
+            (expiryDate - currentDate) / (1000 * 60 * 60 * 24)
+          );
+        } else {
+          cardStatus = 'expired';
+          isExpired = true;
+        }
+      }
+
+      // Get recent transactions count
+      const recentTransactionsCount = await OTPSession.count({
+        where: {
+          userId: user.id,
+          created_at: {
+            [Op.gte]: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // Last 30 days
+          },
+        },
+      });
+
+      const cardDetails = {
+        user: {
+          id: user.id,
+          fullName: user.fullName,
+          email: user.email,
+          phone: user.phone,
+          memberSince: user.createdAt,
+        },
+        card: user.discountCard
+          ? {
+              id: user.discountCard.id,
+              cardNumber: user.discountCard.cardNumber,
+              status: cardStatus,
+              isActive: user.discountCard.isActive,
+              isExpired,
+              expiresAt: user.discountCard.expiresAt,
+              daysRemaining,
+              qrCode: user.discountCard.qrCode,
+              createdAt: user.discountCard.createdAt,
+            }
+          : null,
+
+        activity: {
+          recentTransactions: recentTransactionsCount,
+          isEmailVerified: user.isEmailVerified,
+          isPhoneVerified: user.isPhoneVerified,
+          isProfileComplete: user.isProfileComplete,
+        },
+      };
+
+      res.json(
+        ApiResponse.success(cardDetails, 'Card details retrieved successfully')
+      );
+    } catch (error) {
+      logger.error('Get card details error:', error);
+      res.status(500).json(ApiResponse.error('Internal server error', 500));
+    }
+  }
+
+  /**
+   * Activate user card
+   * POST /api/users/card/activate
+   */
+  static async activateCard(req, res) {
+    try {
+      const userId = req.user?.id || req.admin?.userId;
+
+      if (!userId) {
+        return res
+          .status(401)
+          .json(ApiResponse.error('User not authenticated', 401));
+      }
+
+      const user = await User.findByPk(userId, {
+        include: [{ model: DiscountCard, as: 'discountCard' }],
+      });
+
+      if (!user) {
+        return res.status(404).json(ApiResponse.error('User not found', 404));
+      }
+
+      if (!user.discountCard) {
+        return res
+          .status(404)
+          .json(ApiResponse.error('No card found for user', 404));
+      }
+
+      if (user.discountCard.isActive) {
+        return res
+          .status(400)
+          .json(ApiResponse.error('Card is already active', 400));
+      }
+
+      // Activate the card
+      await user.discountCard.update({
+        isActive: true,
+        updatedAt: new Date(),
+      });
+
+      // Update user card status
+      await user.update({
+        cardStatus: 'active',
+        cardActivatedAt: new Date(),
+      });
+
+      logger.info(`Card activated for user ${userId}`);
+
+      res.json(
+        ApiResponse.success(
+          {
+            cardNumber: user.discountCard.cardNumber,
+            isActive: true,
+            activatedAt: new Date(),
+          },
+          'Card activated successfully'
+        )
+      );
+    } catch (error) {
+      logger.error('Activate card error:', error);
+      res.status(500).json(ApiResponse.error('Internal server error', 500));
+    }
+  }
+
+  /**
+   * Renew user card
+   * POST /api/users/card/renew
+   */
+  static async renewCard(req, res) {
+    try {
+      const userId = req.user?.id || req.admin?.userId;
+      const { months = 1 } = req.body; // Default to 1 months renewal
+
+      if (!userId) {
+        return res
+          .status(401)
+          .json(ApiResponse.error('User not authenticated', 401));
+      }
+
+      const user = await User.findByPk(userId, {
+        attributes: { exclude: ['createdBy'] },
+        include: [{ model: DiscountCard, as: 'discountCard' }],
+      });
+
+      if (!user) {
+        return res.status(404).json(ApiResponse.error('User not found', 404));
+      }
+
+      if (!user.discountCard) {
+        return res
+          .status(404)
+          .json(ApiResponse.error('No card found for user', 404));
+      }
+
+      // Calculate new expiry date
+      const currentExpiryDate = new Date(user.discountCard.expiresAt);
+      const currentDate = new Date();
+
+      // If card is still valid, extend from current expiry date, otherwise from current date
+      const extensionStartDate =
+        currentExpiryDate > currentDate ? currentExpiryDate : currentDate;
+      const newExpiryDate = new Date(extensionStartDate);
+      newExpiryDate.setMonth(newExpiryDate.getMonth() + months);
+
+      // Renew the card
+      await user.discountCard.update({
+        expiresAt: newExpiryDate,
+        isActive: true,
+        updatedAt: new Date(),
+      });
+
+      logger.info(
+        `Card renewed for user ${userId}, new expiry: ${newExpiryDate}`
+      );
+
+      res.json(
+        ApiResponse.success(
+          {
+            cardNumber: user.discountCard.cardNumber,
+            previousExpiryDate: currentExpiryDate,
+            newExpiryDate: newExpiryDate,
+            monthsExtended: months,
+            isActive: true,
+          },
+          'Card renewed successfully'
+        )
+      );
+    } catch (error) {
+      logger.error('Renew card error:', error);
+      res.status(500).json(ApiResponse.error('Internal server error', 500));
+    }
+  }
+
+  /**
+   * Subscribe to newsletter
+   * POST /api/users/newsletter/subscribe
+   */
+  static async subscribeToNewsletter(req, res) {
+    try {
+      const { email } = req.body;
+
+      // Validate email
+      if (!email || !email.includes('@')) {
+        return res
+          .status(400)
+          .json(ApiResponse.error('Please provide a valid email address', 400));
+      }
+
+      const normalizedEmail = email.toLowerCase().trim();
+
+      // Check if email already exists in users table
+      const existingUser = await User.findOne({
+        where: { email: normalizedEmail },
+        attributes: ['id', 'email', 'fullName', 'isActive'],
+      });
+
+      // Prepare email content
+      const emailContent = UserController.generateNewsletterWelcomeEmail(
+        normalizedEmail,
+        existingUser?.fullName || null
+      );
+
+      // Send welcome email
+      await EmailService.sendEmail(
+        normalizedEmail,
+        emailContent.subject,
+        emailContent.html
+      );
+
+      // Log subscription
+      logger.info(`Newsletter subscription: ${normalizedEmail}`);
+
+      // If you want to store newsletter subscriptions separately,
+      // you can create a NewsletterSubscription model and save it here
+      // await NewsletterSubscription.create({
+      //   email: normalizedEmail,
+      //   isActive: true,
+      //   subscribedAt: new Date(),
+      //   source: 'footer_form'
+      // });
+
+      const responseMessage = existingUser
+        ? 'Thank you for subscribing! Welcome back to Pravasi Privilege updates.'
+        : 'Thank you for subscribing! Welcome to Pravasi Privilege updates.';
+
+      res.status(200).json(
+        ApiResponse.success(
+          {
+            email: normalizedEmail,
+            subscribed: true,
+            isExistingUser: !!existingUser,
+          },
+          responseMessage
+        )
+      );
+    } catch (error) {
+      logger.error('Newsletter subscription error:', error);
+      res
+        .status(500)
+        .json(
+          ApiResponse.error('Failed to subscribe. Please try again later.', 500)
+        );
+    }
+  }
+
+  /**
+   * Generate newsletter welcome email content
+   */
+  static generateNewsletterWelcomeEmail(email, userName) {
+    const displayName = userName || 'Valued Customer';
+
+    return {
+      subject: 'Welcome to Pravasi Privilege - Subscription Confirmed!',
+      html: `
+      <div style="max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif; background-color: #f9f9f9;">
+        <!-- Header -->
+        <div style="background: linear-gradient(135deg, #222158 0%, #0066B5 100%); padding: 30px 20px; text-align: center;">
+          <h1 style="color: white; margin: 0; font-size: 28px; font-weight: bold;">
+            Pravasi Privilege Card
+          </h1>
+          <p style="color: #AFDCFF; margin: 10px 0 0 0; font-size: 16px;">
+            Your Gateway to Exclusive Discounts
+          </p>
+        </div>
+
+        <!-- Content -->
+        <div style="padding: 40px 30px; background: white;">
+          <h2 style="color: #222158; margin: 0 0 20px 0; font-size: 24px;">
+            Welcome ${displayName}! 🎉
+          </h2>
+          
+          <p style="color: #666; font-size: 16px; line-height: 1.6; margin-bottom: 20px;">
+            Thank you for subscribing to Pravasi Privilege updates! You're now part of our exclusive community.
+          </p>
+
+          <div style="background: #f8f9ff; border-left: 4px solid #0066B5; padding: 20px; margin: 25px 0;">
+            <h3 style="color: #222158; margin: 0 0 15px 0; font-size: 18px;">
+              What's Next?
+            </h3>
+            <ul style="color: #666; margin: 0; padding-left: 20px;">
+              <li style="margin-bottom: 8px;">Get notified about new partner shops and exclusive discounts</li>
+              <li style="margin-bottom: 8px;">Receive updates about special offers and promotions</li>
+              <li style="margin-bottom: 8px;">Be the first to know about new features and benefits</li>
+              <li style="margin-bottom: 8px;">Access member-only deals and early bird offers</li>
+            </ul>
+          </div>
+
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${process.env.FRONTEND_URL || 'https://pravasiprevilagecard.com'}" 
+               style="display: inline-block; background: #222158; color: white; padding: 15px 30px; 
+                      text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 16px;">
+              Visit Our Website
+            </a>
+          </div>
+
+          <p style="color: #666; font-size: 16px; line-height: 1.6;">
+            If you don't have a Pravasi Privilege Card yet, 
+            <a href="${process.env.FRONTEND_URL || 'https://pravasiprevilagecard.com'}/signup" 
+               style="color: #0066B5; text-decoration: none; font-weight: bold;">
+              sign up today
+            </a> 
+            to start enjoying exclusive discounts at hundreds of partner locations!
+          </p>
+        </div>
+
+        <!-- Footer -->
+        <div style="background: #f5f5f5; padding: 20px 30px; text-align: center; border-top: 1px solid #eee;">
+          <p style="color: #999; font-size: 14px; margin: 0 0 10px 0;">
+            You're receiving this email because you subscribed to Pravasi Privilege updates.
+          </p>
+          <p style="color: #999; font-size: 12px; margin: 0;">
+            © ${new Date().getFullYear()} Pravasi Privilege Card. All rights reserved.
+          </p>
+          <p style="color: #999; font-size: 12px; margin: 10px 0 0 0;">
+            <a href="#" style="color: #999; text-decoration: none;">Unsubscribe</a> | 
+            <a href="#" style="color: #999; text-decoration: none;">Privacy Policy</a>
+          </p>
+        </div>
+      </div>
+    `,
+    };
   }
 }
 

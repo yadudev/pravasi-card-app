@@ -15,6 +15,7 @@ const initDefaultAdmin = require('./utils/initAdmin');
 
 // Import routes
 const adminAuthRoutes = require('./routes/admin/auth');
+const userAuthRoutes = require('./routes/user/auth');
 const adminUserRoutes = require('./routes/admin/users');
 const adminShopRoutes = require('./routes/admin/shops');
 const userRoutes = require('./routes/usersRoutes');
@@ -71,6 +72,7 @@ app.get('/health', (req, res) => {
 
 // API Routes
 app.use('/api/admin/auth', adminAuthRoutes);
+app.use('/api/auth', userAuthRoutes);
 app.use('/api/admin/users', adminUserRoutes);
 app.use('/api/admin/shops', adminShopRoutes);
 app.use('/api/users', userRoutes);

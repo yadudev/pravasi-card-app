@@ -2,14 +2,20 @@ import React, { useState, useEffect } from 'react';
 import { ChevronDown, X } from 'lucide-react';
 import { usersAPI } from '../services/api';
 
-const ActivateModal = ({ isOpen, onClose, userId, userData }) => {
+const ActivateModal = ({
+  isOpen,
+  onClose,
+  userId,
+  userData,
+  onProfileCreateSuccess,
+}) => {
   const [formData, setFormData] = useState({
-    userId: userId,
-    adminId: userData?.adminId || '',
+    userId: '',
+    adminId: '',
     fullName: '',
-    email: userData?.email || '',
+    email: '',
     countryCode: '+91',
-    phone: userData?.phone || '',
+    phone: '',
     location: '',
   });
 
@@ -81,12 +87,11 @@ const ActivateModal = ({ isOpen, onClose, userId, userData }) => {
     setSubmitError('');
 
     try {
-      console.log({formData})
+      console.log({ formData }, 'form data active modal');
       const result = await usersAPI.createProfile(formData);
       console.log({ result });
       if (result.success) {
-        console.log('Profile created successfully:', result.data);
-        alert('Application submitted successfully!');
+        onProfileCreateSuccess(formData);
         onClose();
         setFormData({
           userId: userId,
@@ -109,6 +114,20 @@ const ActivateModal = ({ isOpen, onClose, userId, userData }) => {
       setIsSubmitting(false);
     }
   };
+
+  useEffect(() => {
+    if (userData || userId) {
+      setFormData({
+        userId: userId || userData?.userId || '',
+        adminId: userData?.adminId || '',
+        fullName: userData?.fullName || '',
+        email: userData?.email || '',
+        countryCode: userData?.countryCode || '+91',
+        phone: userData?.phone || '',
+        location: userData?.location || '',
+      });
+    }
+  }, [userData, userId]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;

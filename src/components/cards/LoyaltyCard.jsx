@@ -1,6 +1,7 @@
 import React from 'react';
 import pravasiLogo from '../../assets/images/pravasi-logo.png';
 import PrivilegeCardSVG from '../../assets/PrivilegeCardSVG';
+import { formatFullName } from '../../services/api';
 
 const LoyaltyCard = ({
   cardNumber = '1457-8321-0981-0000',
@@ -55,7 +56,7 @@ const LoyaltyCard = ({
         <div className="flex justify-between items-center ml-6">
           <div className="flex gap-4">
             <div className="text-base font-semibold text-[#222158]">
-              {cardholderName}
+              {formatFullName(cardholderName)}
             </div>
             <div className="text-base font-semibold text-[#222158]">
               {expiryDate}

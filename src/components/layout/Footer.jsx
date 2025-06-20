@@ -1,17 +1,46 @@
-// Footer.jsx - Fixed version
-import React from 'react';
+import React, { useState } from 'react';
 import Card from '../ui/Card';
 import Input from '../ui/Input';
 import Button from '../ui/Button';
 import SocialLinks from '../ui/SocialLinks';
 import pravasiLogo from '../../assets/images/pravasi-logo.png';
+import { newsletterAPI, usersAPI } from '../../services/api';
 
 const Footer = () => {
+  const [email, setEmail] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleSubscribe = async (e) => {
+    e.preventDefault();
+
+    if (!email.trim()) {
+      console.log('please enter valid email');
+      return null;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const result = await newsletterAPI.subscribe(email.trim());
+
+      if (result.success) {
+        setEmail(''); // Clear the form
+      }
+    } catch (error) {
+      console.error('Newsletter subscription error:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <footer className="bg-[#222158] text-white py-16 px-6 relative overflow-hidden font-figtree">
       {/* Decorative eclipse shapes - responsive */}
       {/* Top-right eclipse */}
-      <div className="absolute -top-8 -right-8 md:-top-0 md:-right-0">
+      <div
+        className="absolute -top-8 -right-8 md:-top-0 md:-right-0"
+        id="contact-us"
+      >
         <svg
           width="209"
           height="191"
@@ -72,16 +101,22 @@ const Footer = () => {
         {/* Top Navigation */}
         <div className="mb-8">
           <nav className="flex flex-wrap gap-4 md:gap-8 text-white text-sm md:text-base">
-            <a href="#" className="hover:text-[#AFDCFF] transition-colors">
+            <a href="/" className="hover:text-[#AFDCFF] transition-colors">
               Home
             </a>
-            <a href="#" className="hover:text-[#AFDCFF] transition-colors">
+            <a
+              href="#categories"
+              className="hover:text-[#AFDCFF] transition-colors"
+            >
               Categories
             </a>
-            <a href="#" className="hover:text-[#AFDCFF] transition-colors">
+            <a
+              href="#apply-now"
+              className="hover:text-[#AFDCFF] transition-colors"
+            >
               Apply for Card
             </a>
-            <a href="#" className="hover:text-[#AFDCFF] transition-colors">
+            <a href="#faq" className="hover:text-[#AFDCFF] transition-colors">
               FAQ
             </a>
           </nav>
@@ -104,16 +139,16 @@ const Footer = () => {
             </div>
           </div>
 
-          {/* Right side - Contact Form */}
+          {/* Right side - Newsletter Subscription Form */}
           <Card className="w-full">
             <div className="flex flex-col sm:flex-row items-start justify-between mb-6 gap-4">
               {/* Left Side: Text */}
               <div className="flex flex-col justify-center text-[#222158] flex-1">
                 <h3 className="text-xl md:text-2xl font-semibold mb-1">
-                  Contact Us
+                  Subscribe to Newsletter
                 </h3>
                 <p className="text-xs md:text-sm">
-                  Have questions or need assistance? We're here to help.
+                  Get updates on exclusive offers and new partner stores.
                 </p>
               </div>
 
@@ -127,25 +162,65 @@ const Footer = () => {
               </div>
             </div>
 
-            <form className="space-y-4 md:space-y-6">
+            <form onSubmit={handleSubscribe} className="space-y-4 md:space-y-6">
               <Input
                 label="Email ID"
                 placeholder="Enter your email address"
                 type="email"
                 required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 className="text-gray-600 text-sm w-full"
                 style={{ border: '1px solid #222158' }}
                 labelClassName="text-lg md:text-xl"
+                disabled={isLoading}
               />
 
               <Button
+                type="submit"
                 variant="primary"
                 size="lg"
-                className="w-full bg-[#222158] hover:bg-indigo-800 text-sm md:text-base py-3 md:py-4"
+                disabled={isLoading}
+                className={`w-full bg-[#222158] hover:bg-indigo-800 text-sm md:text-base py-3 md:py-4 transition-all duration-200 ${
+                  isLoading
+                    ? 'opacity-70 cursor-not-allowed'
+                    : 'hover:transform hover:scale-[1.02]'
+                }`}
               >
-                Subscribe
+                {isLoading ? (
+                  <div className="flex items-center justify-center">
+                    <svg
+                      className="animate-spin -ml-1 mr-3 h-4 w-4 text-white"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      ></circle>
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      ></path>
+                    </svg>
+                    Subscribing...
+                  </div>
+                ) : (
+                  'Subscribe'
+                )}
               </Button>
             </form>
+
+            {/* Privacy Note */}
+            <p className="text-xs text-gray-500 mt-3 text-center">
+              We respect your privacy. Unsubscribe at any time.
+            </p>
           </Card>
         </div>
 

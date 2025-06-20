@@ -1,11 +1,25 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-const OTPModal = ({ isOpen, onClose }) => {
+const OTPModal = ({
+  isOpen,
+  onClose,
+  onVerify,
+  onResend,
+  userPhone,
+  userName,
+}) => {
   const [otp, setOtp] = useState(['', '', '', '']);
-  const [timer, setTimer] = useState(116); // 1:56 = 116 seconds
+  const [timer, setTimer] = useState(116);
   const inputRefs = useRef([]);
 
-  // Timer countdown effect
+  useEffect(() => {
+    if (isOpen) {
+      setTimer(116);
+      setOtp(['', '', '', '']);
+      inputRefs.current[0]?.focus();
+    }
+  }, [isOpen]);
+
   useEffect(() => {
     if (isOpen && timer > 0) {
       const interval = setInterval(() => {
@@ -15,12 +29,9 @@ const OTPModal = ({ isOpen, onClose }) => {
     }
   }, [isOpen, timer]);
 
-  // Close modal on Escape key press
   useEffect(() => {
     const handleEscape = (e) => {
-      if (e.key === 'Escape' && isOpen) {
-        onClose();
-      }
+      if (e.key === 'Escape' && isOpen) onClose();
     };
 
     if (isOpen) {
@@ -34,29 +45,23 @@ const OTPModal = ({ isOpen, onClose }) => {
     };
   }, [isOpen, onClose]);
 
-  // Format timer as MM:SS
   const formatTimer = (seconds) => {
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = seconds % 60;
-    return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+    return `${minutes.toString().padStart(2, '0')}:${remainingSeconds
+      .toString()
+      .padStart(2, '0')}`;
   };
 
   const handleOtpChange = (index, value) => {
-    // Only allow single digit
     if (value.length > 1) return;
-
     const newOtp = [...otp];
     newOtp[index] = value;
     setOtp(newOtp);
-
-    // Auto-focus next input
-    if (value && index < 3) {
-      inputRefs.current[index + 1]?.focus();
-    }
+    if (value && index < 3) inputRefs.current[index + 1]?.focus();
   };
 
   const handleKeyDown = (index, e) => {
-    // Handle backspace
     if (e.key === 'Backspace' && !otp[index] && index > 0) {
       inputRefs.current[index - 1]?.focus();
     }
@@ -65,54 +70,36 @@ const OTPModal = ({ isOpen, onClose }) => {
   const handleVerify = () => {
     const otpCode = otp.join('');
     if (otpCode.length === 4) {
-      console.log('OTP Entered:', otpCode);
-      // Add your verification logic here
-      alert('OTP Verified Successfully!');
-      onClose();
+      onVerify(otpCode);
     } else {
-      alert('Please enter complete OTP');
+      alert('Please enter the complete 4-digit OTP');
     }
   };
 
-  const handleResendOTP = () => {
-    setTimer(116); // Reset timer
-    setOtp(['', '', '', '']); // Clear OTP
-    inputRefs.current[0]?.focus(); // Focus first input
-    console.log('Resending OTP...');
-    // Add your resend OTP logic here
+  const handleResend = () => {
+    if (timer > 0) return;
+    setTimer(116);
+    setOtp(['', '', '', '']);
+    inputRefs.current[0]?.focus();
+    onResend();
   };
 
-  const handleBackdropClick = (e) => {
-    if (e.target === e.currentTarget) {
-      onClose();
-    }
-  };
-
-  // Don't render if modal is not open
   if (!isOpen) return null;
 
   return (
-    <div
-      className="fixed inset-0 flex items-center justify-center p-4 z-[9999] font-figtree"
-      onClick={handleBackdropClick}
-    >
-      {/* Modal Container */}
+    <div className="fixed inset-0 flex items-center justify-center p-4 z-[9999] font-figtree">
       <div className="relative rounded-3xl bg-white shadow-2xl max-w-lg w-full p-8">
-        {/* Modal Content */}
         <div className="text-center">
-          {/* Title */}
           <h2 className="text-2xl font-semibold text-black mb-4">
             Enter OTP to Activate Your Card
           </h2>
 
-          {/* Subtitle */}
           <p className="text-[#989898] text-base mb-8 leading-relaxed">
-            We've sent an OTP to your email. Please enter the
-            <br />
-            code below to activate your card
+            We’ve sent an OTP to your email. Please enter the code below to
+            activate your card
           </p>
 
-          {/* OTP Input Fields */}
+          {/* OTP Inputs */}
           <div className="flex justify-center gap-4 mb-2">
             {otp.map((digit, index) => (
               <input
@@ -130,12 +117,10 @@ const OTPModal = ({ isOpen, onClose }) => {
             ))}
           </div>
 
-          {/* Timer */}
-          <div className="text-[#989898] text-left ml-18 text-base font-medium mb-8">
+          <div className="text-[#989898] text-left text-base ml-18 font-medium mb-8">
             {formatTimer(timer)}
           </div>
 
-          {/* Verify Button */}
           <div
             className="w-full rounded-lg mt-8 p-[1px] mb-4"
             style={{
@@ -150,12 +135,15 @@ const OTPModal = ({ isOpen, onClose }) => {
               Verify
             </button>
           </div>
-          {/* Resend OTP Link */}
+
           <p className="text-[#989898] text-sm font-normal">
             Didn't receive the OTP?
             <button
-              onClick={handleResendOTP}
-              className="font-bold hover:underline ml-1"
+              onClick={handleResend}
+              disabled={timer > 0}
+              className={`font-bold hover:underline ml-1 ${
+                timer > 0 ? 'text-gray-400 cursor-not-allowed' : ''
+              }`}
             >
               Resend OTP
             </button>

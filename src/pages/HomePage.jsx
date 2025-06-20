@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Clock, ArrowUpRight, ArrowLeft, ArrowRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 import CategoryCard from '../components/cards/CategoryCard';
 import LoyaltyCard from '../components/cards/LoyaltyCard';
@@ -10,18 +11,29 @@ import BagBroken from '../assets/icons/BagBroken';
 import EarthBroken from '../assets/icons/EarthBroken';
 import KeyBroken from '../assets/icons/KeyBroken';
 import ShopRegistrationModal from '../components/ShopRegistrationModal';
-import SignupModal from '../components/SignUpModal';
 import LoginModal from '../components/LoginModal';
 import ActivateModal from '../components/ActivateModal';
+import SignupModal from '../components/SignupModal';
+import PrivilegeCard from '../components/PrivilegeCard';
+import { usersAPI } from '../services/api';
+import OTPModal from '../components/OTPModal';
+import DiscountCard from '../components/DiscountCard';
 
 const HomePage = () => {
+  const navigate = useNavigate();
   const [activeCategory, setActiveCategory] = useState(0);
   const [currentPage, setCurrentPage] = useState(0);
   const [isShopModalOpen, setIsShopModalOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isSignupModalOpen, setIsSignupModalOpen] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [isPrivilegeCardModalOpen, setIsPrivilegeCardModalOpen] =
+    useState(false);
   const [newUserData, setNewUserData] = useState(null);
+  const [userData, setUserData] = useState(null);
+  const [isOTPModalOpen, setIsOTPModalOpen] = useState(false);
+  const [otpSessionId, setOtpSessionId] = useState(null);
+  const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
 
   const categories = [
     { name: 'Shopping', iconName: 'Shopping', color: 'bg-[#1C1061]' },
@@ -68,10 +80,6 @@ const HomePage = () => {
     setActiveCategory(0);
   };
 
-  const handleCategoryClick = (index) => {
-    setActiveCategory(index);
-  };
-
   const handleCloseSignupModal = () => {
     setIsSignupModalOpen(false);
   };
@@ -92,12 +100,97 @@ const HomePage = () => {
     setShowProfileModal(true);
   };
 
-  const handleCloseProfileModal = () => {
-    setShowProfileModal(false);
-    setNewUserData(null); 
+  // Handler for closing success modal (DiscountCard)
+  const handleCloseSuccessModal = () => {
+    setIsSuccessModalOpen(false);
+    // Reset the flow
+    setNewUserData(null);
   };
 
-  
+  // Modified: Handle profile creation success - now opens Privilege card modal
+  const handleProfileCreateSuccess = async (profileData) => {
+    try {
+      // Close the ActivateModal
+      setShowProfileModal(false);
+
+      // Update userData with the profile data
+      setUserData({
+        ...newUserData,
+        ...profileData,
+      });
+
+      // Open Privilege card modal instead of OTP modal
+      setIsPrivilegeCardModalOpen(true);
+    } catch (error) {
+      console.error('Error in profile create success:', error);
+      // You might want to show an error message to the user
+    }
+  };
+
+  const handleCloseProfileModal = () => {
+    setShowProfileModal(false);
+    setNewUserData(null);
+  };
+
+  const handleClosePrivilegeCardModal = () => {
+    setIsPrivilegeCardModalOpen(false);
+  };
+
+  const handleActivateCard = async () => {
+    setIsLoginModalOpen(true);
+    setIsPrivilegeCardModalOpen(false);
+  };
+
+  const handleCloseOTPModal = () => {
+    setIsOTPModalOpen(false);
+    setOtpSessionId(null);
+  };
+
+  const handleOTPResend = async () => {
+    try {
+      const response = await usersAPI.resendEmailOTP({
+        email: userData.email,
+        sessionId: otpSessionId,
+      });
+
+      if (response.success) {
+        setOtpSessionId(response.data.sessionId);
+        console.log('Email OTP resent successfully to:', userData.email);
+        return true;
+      } else {
+        throw new Error(response.message || 'Failed to resend OTP');
+      }
+    } catch (error) {
+      console.error('Error resending Email OTP:', error);
+      throw error;
+    }
+  };
+
+  // OTP verification handler - opens DiscountCard on success
+  const handleOTPVerify = async (otpCode) => {
+    try {
+      const response = await usersAPI.verifyEmailOTP({
+        otp: otpCode,
+        sessionId: otpSessionId,
+        email: userData.email,
+      });
+
+      if (response.success) {
+        // Close OTP modal and open discount card modal
+        setIsOTPModalOpen(false);
+        setOtpSessionId(null);
+        setIsSuccessModalOpen(true);
+
+        console.log('Card activation successful:', response);
+      } else {
+        throw new Error(response.message || 'Invalid OTP');
+      }
+    } catch (error) {
+      console.error('OTP verification failed:', error);
+      throw error;
+    }
+  };
+
   const howItWorksSteps = [
     {
       step: 1,
@@ -192,7 +285,7 @@ const HomePage = () => {
             </h1>
 
             {/* Loyalty Card Display */}
-            <div className="mb-16 flex justify-center">
+            <div className="mb-16 flex justify-center" id="apply-now">
               <LoyaltyCard />
             </div>
 
@@ -260,8 +353,8 @@ const HomePage = () => {
         </section>
       </div>
       {/* Categories Section */}
-      <section className="py-16 px-6 ml-4 font-figtree">
-        <div className="max-w-7xl mx-auto">
+      <section className="py-16 px-6 ml-4 font-figtree" id="categories">
+        <div className="mx-auto">
           <div className="flex items-center justify-between mb-8">
             <div>
               <h2
@@ -304,12 +397,11 @@ const HomePage = () => {
             {currentCategories.map((category, index) => (
               <div
                 key={`page-${currentPage}-${category.name}-${index}`}
-                className="transform transition-all duration-300 ease-out"
+                className="transform transition-all duration-300 ease-out cursor-pointer"
               >
                 <CategoryCard
                   category={category}
                   isActive={activeCategory === index}
-                  onClick={() => handleCategoryClick(index)}
                 />
               </div>
             ))}
@@ -317,8 +409,8 @@ const HomePage = () => {
         </div>
       </section>
       {/* How It Works Section */}
-      <section className="py-16 px-6 ml-4  font-figtree">
-        <div className="max-w-7xl mx-auto text-center">
+      <section className="py-16 px-6 ml-4 font-figtree" id="how-it-works">
+        <div className="mx-auto text-center">
           <h2
             className="text-3xl md:text-4xl font-bold mb-16 text-transparent bg-clip-text"
             style={{
@@ -330,7 +422,6 @@ const HomePage = () => {
           >
             How It Works
           </h2>
-
           <StepIndicator
             steps={howItWorksSteps}
             currentStep={3}
@@ -388,7 +479,7 @@ const HomePage = () => {
         </section>
       </div>
       {/* FAQ Section */}
-      <div className="px-6 ml-4 mt-24 py-8">
+      <div className="px-6 ml-4 mt-24 py-8" id="faqs">
         <section className="py-16 px-6 bg-white font-figtree">
           <div className="max-w-7xl mx-auto">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -417,10 +508,13 @@ const HomePage = () => {
           </div>
         </section>
       </div>
+
+      {/* Shop Registration Modal */}
       <ShopRegistrationModal
         isOpen={isShopModalOpen}
         onClose={() => setIsShopModalOpen(false)}
       />
+
       {/* Signup Modal */}
       <SignupModal
         isOpen={isSignupModalOpen}
@@ -434,14 +528,44 @@ const HomePage = () => {
         isOpen={isLoginModalOpen}
         onClose={handleCloseLoginModal}
         onSwitchToSignup={handleSignupClick}
+        onSignupSuccess={handleSignupSuccess}
       />
 
-       {showProfileModal && newUserData && (
+      {/* Profile/Activate Modal */}
+      {showProfileModal && newUserData && (
         <ActivateModal
           isOpen={showProfileModal}
           onClose={handleCloseProfileModal}
           userId={newUserData.userId}
           userData={newUserData}
+          onProfileCreateSuccess={handleProfileCreateSuccess}
+        />
+      )}
+
+      {/* Privilege Card Modal */}
+      <PrivilegeCard
+        isOpen={isPrivilegeCardModalOpen}
+        onClose={handleClosePrivilegeCardModal}
+        onActivate={handleActivateCard}
+      />
+
+      {/* OTP Modal */}
+      <OTPModal
+        isOpen={isOTPModalOpen}
+        onClose={handleCloseOTPModal}
+        onVerify={handleOTPVerify}
+        onResend={handleOTPResend}
+        userPhone={userData?.phone}
+        userName={userData?.name}
+      />
+
+      {/* Success Modal (DiscountCard) */}
+      {isSuccessModalOpen && (
+        <DiscountCard
+          isOpen={isSuccessModalOpen}
+          onClose={handleCloseSuccessModal}
+          title="Card Activated Successfully!"
+          message="Your privilege card has been activated and is ready to use."
         />
       )}
     </div>

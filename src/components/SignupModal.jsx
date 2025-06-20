@@ -134,8 +134,6 @@ const SignupModal = ({ isOpen, onClose, onSwitchToLogin, onSignupSuccess }) => {
 
       const response = await usersAPI.signUp(userData);
 
-      console.log('Signup successful:', response);
-
       // Extract user ID from response (adjust based on your API response structure)
       const userId = response.data?.id || response.id || response.userId;
 
@@ -144,6 +142,11 @@ const SignupModal = ({ isOpen, onClose, onSwitchToLogin, onSignupSuccess }) => {
 
       // Call the callback with user ID and any other needed data
       if (onSignupSuccess) {
+        setFormData({
+          emailOrNumber: '',
+          newPassword: '',
+          confirmPassword: '',
+        });
         onSignupSuccess(userId, {
           ...response.data, // Pass any additional user data
         });

@@ -1,16 +1,30 @@
 import React, { useEffect, useState } from 'react';
 import pravasiLogo from '../assets/images/pravasi-logo.png';
-import { ArrowLeft, Eye, EyeClosed } from 'lucide-react';
+import { ArrowLeft, Eye, EyeClosed, Loader2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../constants/AuthContext';
+import { usersAPI } from '../services/api';
 
-const LoginModal = ({ isOpen, onClose, onSwitchToSignup }) => {
+const LoginModal = ({
+  isOpen,
+  onClose,
+  onSwitchToSignup,
+  onSignupSuccess,
+  onLoginSuccess,
+}) => {
+  const navigate = useNavigate();
+  const { login, isLoading: authLoading } = useAuth();
+
   const [formData, setFormData] = useState({
     emailOrNumber: '',
     password: '',
+    rememberMe: false,
   });
   const [errors, setErrors] = useState({});
   const [showPassword, setShowPassword] = useState({
     password: false,
   });
+  const [isLoading, setIsLoading] = useState(false);
 
   const togglePasswordVisibility = (field) => {
     setShowPassword((prev) => ({
@@ -28,7 +42,7 @@ const LoginModal = ({ isOpen, onClose, onSwitchToSignup }) => {
 
     if (isOpen) {
       document.addEventListener('keydown', handleEscape);
-      document.body.style.overflow = 'hidden'; // Prevent background scrolling
+      document.body.style.overflow = 'hidden';
     }
 
     return () => {
@@ -38,10 +52,10 @@ const LoginModal = ({ isOpen, onClose, onSwitchToSignup }) => {
   }, [isOpen, onClose]);
 
   const handleInputChange = (e) => {
-    const { name, value } = e.target;
+    const { name, value, type, checked } = e.target;
     setFormData((prev) => ({
       ...prev,
-      [name]: value,
+      [name]: type === 'checkbox' ? checked : value,
     }));
 
     // Clear error when user starts typing
@@ -53,29 +67,167 @@ const LoginModal = ({ isOpen, onClose, onSwitchToSignup }) => {
     }
   };
 
+  const validateForm = () => {
+    const newErrors = {};
+
+    if (!formData.emailOrNumber.trim()) {
+      newErrors.emailOrNumber = 'Email or mobile number is required';
+    } else {
+      // Basic email/phone validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const phoneRegex = /^[0-9]{10,15}$/;
+      const input = formData.emailOrNumber.trim();
+
+      if (!emailRegex.test(input) && !phoneRegex.test(input)) {
+        newErrors.emailOrNumber = 'Please enter a valid email or mobile number';
+      }
+    }
+
+    if (!formData.password.trim()) {
+      newErrors.password = 'Password is required';
+    } else if (formData.password.length < 6) {
+      newErrors.password = 'Password must be at least 6 characters';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  // Function to fetch user profile and check completeness using existing API
+  const fetchUserProfile = async () => {
+    try {
+      const profileData = await usersAPI.getProfileStatus();
+      return profileData;
+    } catch (error) {
+      console.error('Error fetching user profile:', error);
+      throw error;
+    }
+  };
+
+  // Function to check if profile is complete
+  const checkProfileCompleteness = (profileData) => {
+    // Check the isProfileCompleted boolean field from user table
+    return profileData?.data?.status?.isProfileComplete === true;
+  };
+
   const handleBackClick = () => {
-    // Simple navigation back to home
-    window.history.back();
-    // Or if you want to go to home specifically:
-    // window.location.href = '/';
+    onClose();
   };
 
   const handleBackdropClick = (e) => {
-    // Close modal when clicking on backdrop
     if (e.target === e.currentTarget) {
       onClose();
     }
   };
 
-  const onHandleClcik = () => {
+  const onHandleClick = () => {
     onClose();
     onSwitchToSignup();
   };
 
+  const handleForgotPasswordClick = async () => {
+    if (!formData.emailOrNumber.trim()) {
+      setErrors({
+        emailOrNumber: 'Please enter your email or mobile number first',
+      });
+      return;
+    }
 
-  const handleSubmit = () => {};
+    try {
+      await usersAPI.forgotPassword(formData.emailOrNumber.trim());
+      alert(
+        'Password reset instructions have been sent to your email/mobile number.'
+      );
+    } catch (error) {
+      console.error('Forgot password error:', error);
+      setErrors({
+        general:
+          error.response?.data?.message ||
+          'Failed to send reset instructions. Please try again.',
+      });
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (!validateForm()) return;
+
+    setIsLoading(true);
+    setErrors({});
+
+    try {
+      // Use the login function from AuthContext
+      const result = await login(formData.emailOrNumber, formData.password);
+
+      if (result.success) {
+        // Login successful - AuthContext handles token storage and user state
+
+        try {
+          // Fetch user profile to check completeness using existing API
+          const profileData = await fetchUserProfile();
+          const isProfileComplete = checkProfileCompleteness(profileData);
+          // Close the modal
+          onClose();
+
+          // Check profile completeness and navigate accordingly
+          if (!isProfileComplete) {
+            // Profile incomplete - show activation modal
+            if (onSignupSuccess) {
+              setFormData({
+                emailOrNumber: '',
+                password: '',
+                rememberMe: false,
+              });
+              onSignupSuccess(profileData?.data?.user?.id, {
+                email: profileData?.data?.user?.email,
+                phone: profileData?.data?.user?.phone,
+                adminId: profileData?.data?.user?.adminId,
+              });
+            }
+          } else {
+            // Profile complete - navigate to search
+            navigate('/search');
+          }
+        } catch (profileError) {
+          console.error('Error fetching user profile:', profileError);
+
+          // Fallback to the original method if profile API fails
+          if (result.user && !result.user.isProfileComplete) {
+            // Profile incomplete - show activation modal
+            if (onSignupSuccess) {
+              onSignupSuccess(result.user.id, {
+                email: result.user.email,
+                phone: result.user.phone,
+                adminId: result.user.adminId,
+              });
+            }
+          } else {
+            // Profile complete - navigate to search
+            navigate('/search');
+          }
+
+          // Optionally show a warning that profile check failed
+          console.warn(
+            'Profile completeness check failed, using fallback method'
+          );
+        }
+      } else {
+        // Login failed - show error from AuthContext
+        setErrors({ general: result.error });
+      }
+    } catch (error) {
+      console.error('Login error:', error);
+      setErrors({ general: 'An unexpected error occurred. Please try again.' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   if (!isOpen) return null;
+
+  // Combine local loading state with auth loading state
+  const isSubmitting = isLoading || authLoading;
 
   return (
     <div
@@ -88,7 +240,8 @@ const LoginModal = ({ isOpen, onClose, onSwitchToSignup }) => {
           {/* Back Button */}
           <button
             onClick={handleBackClick}
-            className="flex items-center text-black hover:text-gray-800 transition-colors pl-6"
+            className="flex items-center text-black hover:text-gray-800 transition-colors pl-6 focus:outline-none"
+            disabled={isSubmitting}
           >
             <ArrowLeft size={30} />
           </button>
@@ -97,25 +250,38 @@ const LoginModal = ({ isOpen, onClose, onSwitchToSignup }) => {
             src={pravasiLogo}
             alt="Pravasi Logo"
             className="h-25 w-auto cursor-pointer"
-            onClick={() => (window.location.href = '/')}
+            onClick={() => {
+              onClose();
+              navigate('/');
+            }}
           />
         </div>
+
         <div className="px-4">
           <h2 className="text-4xl font-bold mb-4 text-center">Login</h2>
-          <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
+
+          {/* General Error Message */}
+          {errors.general && (
+            <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg">
+              {errors.general}
+            </div>
+          )}
+
+          <form className="space-y-4" onSubmit={handleSubmit}>
             <div>
               <label className="block text-base font-normal text-black mb-2">
                 Email or Number
               </label>
               <input
                 name="emailOrNumber"
-                placeholder="Email mobile number or email"
+                placeholder="Enter mobile number or email"
                 type="text"
                 value={formData.emailOrNumber}
                 onChange={handleInputChange}
-                className={`w-full px-4 py-3 border rounded-lg placeholder-gray-400 bg-white ${
-                  errors.emailOrNumber ? 'border-red-500' : 'border-gray-300'
-                }`}
+                disabled={isSubmitting}
+                className={`w-full px-4 py-3 border rounded-lg placeholder-gray-400 bg-white transition-colors ${
+                  errors.emailOrNumber ? 'border-red-500' : ''
+                } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
               />
               {errors.emailOrNumber && (
                 <p className="text-red-500 text-xs mt-1">
@@ -123,14 +289,20 @@ const LoginModal = ({ isOpen, onClose, onSwitchToSignup }) => {
                 </p>
               )}
             </div>
+
             <div>
               <div className="flex justify-between items-center mb-2">
                 <label className="text-base font-normal text-black">
                   Password
                 </label>
-                <label className="text-base font-normal text-black hover:underline cursor-pointer">
+                <button
+                  type="button"
+                  onClick={handleForgotPasswordClick}
+                  className="text-base font-normal text-black hover:underline cursor-pointer focus:outline-none"
+                  disabled={isSubmitting}
+                >
                   Forgot password?
-                </label>
+                </button>
               </div>
               <div className="relative">
                 <input
@@ -139,14 +311,16 @@ const LoginModal = ({ isOpen, onClose, onSwitchToSignup }) => {
                   type={showPassword.password ? 'text' : 'password'}
                   value={formData.password}
                   onChange={handleInputChange}
-                  className={`w-full px-4 py-3 border rounded-lg placeholder-gray-400 bg-white pr-12 ${
+                  disabled={isSubmitting}
+                  className={`w-full px-4 py-3 border rounded-lg placeholder-gray-400 bg-white pr-12 transition-colors ${
                     errors.password ? 'border-red-500' : 'border-gray-300'
-                  }`}
+                  } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
                 />
                 <button
                   type="button"
                   onClick={() => togglePasswordVisibility('password')}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  disabled={isSubmitting}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none"
                 >
                   {showPassword.password ? (
                     <EyeClosed size={20} />
@@ -159,6 +333,7 @@ const LoginModal = ({ isOpen, onClose, onSwitchToSignup }) => {
                 <p className="text-red-500 text-xs mt-1">{errors.password}</p>
               )}
             </div>
+
             <div className="text-base font-normal text-[#707070] text-justify leading-relaxed">
               By continuing, you agree to Pravasi Privilege's{' '}
               <a href="#" className="text-[#3D3C96] hover:underline">
@@ -169,6 +344,7 @@ const LoginModal = ({ isOpen, onClose, onSwitchToSignup }) => {
                 privacy policy
               </a>
             </div>
+
             <div
               className="w-full rounded-lg p-[1px]"
               style={{
@@ -177,18 +353,39 @@ const LoginModal = ({ isOpen, onClose, onSwitchToSignup }) => {
               }}
             >
               <button
-                onClick={handleSubmit}
-                className="w-full bg-[#AFDCFF] text-[#222158] py-4 rounded-lg font-semibold text-base transition-colors duration-200"
+                type="submit"
+                disabled={
+                  isSubmitting ||
+                  !formData.emailOrNumber.trim() ||
+                  !formData.password.trim()
+                }
+                className={`w-full bg-[#AFDCFF] text-[#222158] py-4 rounded-lg font-semibold text-base transition-colors duration-200 flex items-center justify-center ${
+                  isSubmitting ||
+                  !formData.emailOrNumber.trim() ||
+                  !formData.password.trim()
+                    ? 'opacity-50 cursor-not-allowed'
+                    : 'hover:bg-[#9BCFFF]'
+                }`}
               >
-                Login
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="animate-spin mr-2" size={20} />
+                    Logging in...
+                  </>
+                ) : (
+                  'Login'
+                )}
               </button>
             </div>
           </form>
+
           <div className="my-2 pt-4 text-base text-center text-[#707070]">
-            Don’t have an account?
+            Don't have an account?
             <span
-              className="text-black hover:underline cursor-pointer ml-2"
-              onClick={onHandleClcik}
+              className={`text-black hover:underline cursor-pointer ml-2 ${
+                isSubmitting ? 'pointer-events-none opacity-50' : ''
+              }`}
+              onClick={onHandleClick}
             >
               Sign up
             </span>

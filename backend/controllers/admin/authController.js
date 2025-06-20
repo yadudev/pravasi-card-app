@@ -1,7 +1,7 @@
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const rateLimit = require('express-rate-limit');
-const { Admin } = require('../../models');
+const { Admin, User } = require('../../models'); // Import both models
 const { Op } = require('sequelize');
 const ApiResponse = require('../../utils/responses');
 const PermissionManager = require('../../utils/permissions');
@@ -49,11 +49,7 @@ class AuthController {
    * Admin Login
    * POST /api/admin/auth/login
    */
-  /**
-   * Admin Login - CORRECTED VERSION
-   * POST /api/admin/auth/login
-   */
-  static async login(req, res) {
+  static async adminLogin(req, res) {
     try {
       const { email, password, rememberMe = false } = req.body;
 
@@ -71,7 +67,7 @@ class AuthController {
 
       if (!admin) {
         logger.warn(
-          `Login attempt with non-existent email: ${normalizedEmail}`
+          `Admin login attempt with non-existent email: ${normalizedEmail}`
         );
         return res
           .status(401)
@@ -83,7 +79,7 @@ class AuthController {
           (admin.lockUntil - new Date()) / 1000 / 60
         );
         logger.warn(
-          `Login attempt on locked account: ${normalizedEmail}, ${lockTimeRemaining} minutes remaining`
+          `Admin login attempt on locked account: ${normalizedEmail}, ${lockTimeRemaining} minutes remaining`
         );
         return res
           .status(423)
@@ -97,7 +93,9 @@ class AuthController {
       }
 
       if (!admin.isActive) {
-        logger.warn(`Login attempt on inactive account: ${normalizedEmail}`);
+        logger.warn(
+          `Admin login attempt on inactive account: ${normalizedEmail}`
+        );
         return res
           .status(401)
           .json(
@@ -117,14 +115,14 @@ class AuthController {
         if (newAttempts >= 5) {
           updateData.lockUntil = new Date(Date.now() + 30 * 60 * 1000);
           logger.warn(
-            `Account locked due to multiple failed attempts: ${normalizedEmail}`
+            `Admin account locked due to multiple failed attempts: ${normalizedEmail}`
           );
         }
 
         await admin.update(updateData);
 
         logger.warn(
-          `Invalid password attempt for: ${normalizedEmail}, attempts: ${newAttempts}`
+          `Invalid password attempt for admin: ${normalizedEmail}, attempts: ${newAttempts}`
         );
         return res
           .status(401)
@@ -144,6 +142,7 @@ class AuthController {
         email: admin.email,
         role: admin.role,
         sessionId,
+        userType: 'admin', // Important: specify user type
       };
 
       const accessToken = jwt.sign(tokenPayload, process.env.JWT_SECRET, {
@@ -156,7 +155,8 @@ class AuthController {
         {
           id: admin.id,
           sessionId,
-          type: 'refresh', // 👈 Important for refreshToken validation
+          type: 'refresh',
+          userType: 'admin',
         },
         process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET,
         {
@@ -177,63 +177,260 @@ class AuthController {
             refreshToken: refreshToken,
             expiresIn: rememberMe ? '7d' : process.env.JWT_EXPIRES_IN || '24h',
             admin: admin.toJSON(),
+            userType: 'admin',
           },
-          'Login successful'
+          'Admin login successful'
         )
       );
     } catch (error) {
-      logger.error('Login error:', error);
+      logger.error('Admin login error:', error);
       res.status(500).json(ApiResponse.error('Internal server error', 500));
     }
   }
 
   /**
-   * Get Admin Profile
-   * GET /api/admin/auth/profile
+   * User Login
+   * POST /api/auth/login
+   */
+  static async userLogin(req, res) {
+    try {
+      const { email, password, rememberMe = false } = req.body;
+
+      if (!email || !password) {
+        return res
+          .status(400)
+          .json(ApiResponse.error('Email and password are required', 400));
+      }
+
+      const normalizedEmail = email.trim().toLowerCase();
+
+      const user = await Admin.scope('withPassword').findOne({
+        where: { email: normalizedEmail },
+      });
+
+      if (!user) {
+        logger.warn(
+          `User login attempt with non-existent email: ${normalizedEmail}`
+        );
+        return res
+          .status(401)
+          .json(ApiResponse.error('Invalid credentials', 401));
+      }
+
+      if (user.lockUntil && user.lockUntil > new Date()) {
+        const lockTimeRemaining = Math.ceil(
+          (user.lockUntil - new Date()) / 1000 / 60
+        );
+        logger.warn(
+          `User login attempt on locked account: ${normalizedEmail}, ${lockTimeRemaining} minutes remaining`
+        );
+        return res
+          .status(423)
+          .json(
+            ApiResponse.error(
+              `Account temporarily locked. Try again in ${lockTimeRemaining} minutes.`,
+              423,
+              { lockTimeRemaining }
+            )
+          );
+      }
+
+      if (!user.isActive) {
+        logger.warn(
+          `User login attempt on inactive account: ${normalizedEmail}`
+        );
+        return res
+          .status(401)
+          .json(
+            ApiResponse.error(
+              'Account is inactive. Please contact support.',
+              401
+            )
+          );
+      }
+
+      // Check if email is verified (if your user model has email verification)
+      if (user.emailVerified === false) {
+        logger.warn(
+          `User login attempt on unverified account: ${normalizedEmail}`
+        );
+        return res
+          .status(401)
+          .json(
+            ApiResponse.error(
+              'Please verify your email address before logging in.',
+              401
+            )
+          );
+      }
+
+      const isValidPassword = await user.validatePassword(password);
+
+      if (!isValidPassword) {
+        const newAttempts = (user.loginAttempts || 0) + 1;
+        const updateData = { loginAttempts: newAttempts };
+
+        if (newAttempts >= 5) {
+          updateData.lockUntil = new Date(Date.now() + 30 * 60 * 1000);
+          logger.warn(
+            `User account locked due to multiple failed attempts: ${normalizedEmail}`
+          );
+        }
+
+        await user.update(updateData);
+
+        logger.warn(
+          `Invalid password attempt for user: ${normalizedEmail}, attempts: ${newAttempts}`
+        );
+        return res
+          .status(401)
+          .json(ApiResponse.error('Invalid credentials', 401));
+      }
+
+      await user.update({
+        lastLogin: new Date(),
+        loginAttempts: 0,
+        lockUntil: null,
+      });
+
+      const sessionId = crypto.randomUUID();
+
+      const tokenPayload = {
+        id: user.id,
+        email: user.email,
+        sessionId,
+        userType: 'user',
+      };
+
+      const accessToken = jwt.sign(tokenPayload, process.env.JWT_SECRET, {
+        expiresIn: rememberMe ? '7d' : process.env.JWT_EXPIRES_IN || '24h',
+        issuer: process.env.JWT_ISSUER || 'user-app',
+        audience: process.env.JWT_AUDIENCE || 'app-users',
+      });
+
+      const refreshToken = jwt.sign(
+        {
+          id: user.id,
+          sessionId,
+          type: 'refresh',
+          userType: 'user',
+        },
+        process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET,
+        {
+          expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '30d',
+          issuer: process.env.JWT_ISSUER || 'user-app',
+          audience: process.env.JWT_AUDIENCE || 'app-users',
+        }
+      );
+
+      logger.info(`User login successful: ${user.email}`);
+
+      res.json(
+        ApiResponse.success(
+          {
+            token: accessToken,
+            refreshToken: refreshToken,
+            expiresIn: rememberMe ? '7d' : process.env.JWT_EXPIRES_IN || '24h',
+            user: user.toJSON(),
+            userType: 'user',
+          },
+          'User login successful'
+        )
+      );
+    } catch (error) {
+      logger.error('User login error:', error);
+      res.status(500).json(ApiResponse.error('Internal server error', 500));
+    }
+  }
+
+  /**
+   * Get Profile (works for both admin and user)
+   * GET /api/admin/auth/profile or /api/auth/profile
    */
   static async getProfile(req, res) {
     try {
-      const admin = await Admin.findByPk(req.admin.id);
+      const userType = req.user?.userType || req.admin?.userType;
+      const userId = req.user?.id || req.admin?.id;
 
-      if (!admin) {
-        return res.status(404).json(ApiResponse.error('Admin not found', 404));
+      if (!userType || !userId) {
+        return res.status(401).json(ApiResponse.error('Unauthorized', 401));
       }
 
-      if (!admin.isActive) {
-        return res
-          .status(401)
-          .json(ApiResponse.error('Account is inactive', 401));
-      }
+      let profileData;
 
-      // Enhanced profile information
-      const profileData = {
-        ...admin.toJSON(),
-        lastLoginFormatted: admin.lastLogin
-          ? new Intl.DateTimeFormat('en-US', {
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit',
-              timeZoneName: 'short',
-            }).format(new Date(admin.lastLogin))
-          : 'Never',
-        accountAge: admin.createdAt
-          ? Math.floor(
-              (new Date() - new Date(admin.createdAt)) / (1000 * 60 * 60 * 24)
-            )
-          : 0,
-        permissions: PermissionManager.getPermissionsByRole(admin.role),
-        permissionGroups: PermissionManager.getPermissionGroups(admin.role),
-        accessibleModules: PermissionManager.getModules().filter((module) => {
-          const permissions = PermissionManager.getPermissionsByRole(
-            admin.role
-          );
-          return permissions.some((permission) =>
-            permission.startsWith(module.key)
-          );
-        }),
-      };
+      if (userType === 'admin') {
+        const admin = await Admin.findByPk(userId);
+        if (!admin) {
+          return res
+            .status(404)
+            .json(ApiResponse.error('Admin not found', 404));
+        }
+        if (!admin.isActive) {
+          return res
+            .status(401)
+            .json(ApiResponse.error('Account is inactive', 401));
+        }
+
+        profileData = {
+          ...admin.toJSON(),
+          lastLoginFormatted: admin.lastLogin
+            ? new Intl.DateTimeFormat('en-US', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                timeZoneName: 'short',
+              }).format(new Date(admin.lastLogin))
+            : 'Never',
+          accountAge: admin.createdAt
+            ? Math.floor(
+                (new Date() - new Date(admin.createdAt)) / (1000 * 60 * 60 * 24)
+              )
+            : 0,
+          permissions: PermissionManager.getPermissionsByRole(admin.role),
+          permissionGroups: PermissionManager.getPermissionGroups(admin.role),
+          accessibleModules: PermissionManager.getModules().filter((module) => {
+            const permissions = PermissionManager.getPermissionsByRole(
+              admin.role
+            );
+            return permissions.some((permission) =>
+              permission.startsWith(module.key)
+            );
+          }),
+          userType: 'admin',
+        };
+      } else {
+        const user = await User.findByPk(userId);
+        if (!user) {
+          return res.status(404).json(ApiResponse.error('User not found', 404));
+        }
+        if (!user.isActive) {
+          return res
+            .status(401)
+            .json(ApiResponse.error('Account is inactive', 401));
+        }
+
+        profileData = {
+          ...user.toJSON(),
+          lastLoginFormatted: user.lastLogin
+            ? new Intl.DateTimeFormat('en-US', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                timeZoneName: 'short',
+              }).format(new Date(user.lastLogin))
+            : 'Never',
+          accountAge: user.createdAt
+            ? Math.floor(
+                (new Date() - new Date(user.createdAt)) / (1000 * 60 * 60 * 24)
+              )
+            : 0,
+          userType: 'user',
+        };
+      }
 
       res.json(
         ApiResponse.success(profileData, 'Profile retrieved successfully')
@@ -241,20 +438,26 @@ class AuthController {
     } catch (error) {
       logger.error('Get profile error:', {
         error: error.message,
-        adminId: req.admin?.id,
+        userId: req.user?.id || req.admin?.id,
+        userType: req.user?.userType || req.admin?.userType,
       });
       res.status(500).json(ApiResponse.error('Internal server error', 500));
     }
   }
 
   /**
-   * Update Admin Profile
-   * PUT /api/admin/auth/profile
+   * Update Profile (works for both admin and user)
+   * PUT /api/admin/auth/profile or /api/auth/profile
    */
   static async updateProfile(req, res) {
     try {
-      const { fullName, username, avatar } = req.body;
-      const admin = req.admin;
+      const userType = req.user?.userType || req.admin?.userType;
+      const userId = req.user?.id || req.admin?.id;
+      const { fullName, username, avatar, phone, dateOfBirth } = req.body;
+
+      if (!userType || !userId) {
+        return res.status(401).json(ApiResponse.error('Unauthorized', 401));
+      }
 
       // Input validation
       const updateData = {};
@@ -280,61 +483,78 @@ class AuthController {
             );
         }
 
-        // Check if username is already taken by another admin
-        if (trimmedUsername !== admin.username) {
-          const existingAdmin = await Admin.findOne({
-            where: {
-              username: trimmedUsername,
-              id: { [Op.ne]: admin.id },
-            },
-          });
+        // Check if username is already taken by another user of the same type
+        const Model = userType === 'admin' ? Admin : User;
+        const existingUser = await Model.findOne({
+          where: {
+            username: trimmedUsername,
+            id: { [Op.ne]: userId },
+          },
+        });
 
-          if (existingAdmin) {
-            return res
-              .status(400)
-              .json(ApiResponse.error('Username already taken', 400));
-          }
+        if (existingUser) {
+          return res
+            .status(400)
+            .json(ApiResponse.error('Username already taken', 400));
         }
         updateData.username = trimmedUsername;
       }
 
       if (avatar !== undefined) {
-        // Validate avatar URL/path if needed
         updateData.avatar = avatar;
       }
 
-      // Update admin profile
-      await Admin.update(updateData, { where: { id: admin.id } });
+      // User-specific fields
+      if (userType === 'user') {
+        if (phone !== undefined) {
+          updateData.phone = phone;
+        }
+        if (dateOfBirth !== undefined) {
+          updateData.dateOfBirth = dateOfBirth;
+        }
+      }
 
-      logger.info(`Admin profile updated: ${admin.email}`, {
-        adminId: admin.id,
+      // Update profile
+      const Model = userType === 'admin' ? Admin : User;
+      await Model.update(updateData, { where: { id: userId } });
+
+      logger.info(`${userType} profile updated`, {
+        userId: userId,
+        userType: userType,
         updatedFields: Object.keys(updateData),
       });
 
       // Return updated profile
-      const updatedAdmin = await Admin.findByPk(admin.id);
+      const updatedRecord = await Model.findByPk(userId);
       res.json(
         ApiResponse.success(
-          updatedAdmin.toJSON(),
+          { ...updatedRecord.toJSON(), userType },
           'Profile updated successfully'
         )
       );
     } catch (error) {
       logger.error('Update profile error:', {
         error: error.message,
-        adminId: req.admin?.id,
+        userId: req.user?.id || req.admin?.id,
+        userType: req.user?.userType || req.admin?.userType,
       });
       res.status(500).json(ApiResponse.error('Internal server error', 500));
     }
   }
 
   /**
-   * Change Password
-   * PUT /api/admin/auth/change-password
+   * Change Password (works for both admin and user)
+   * PUT /api/admin/auth/change-password or /api/auth/change-password
    */
   static async changePassword(req, res) {
     try {
+      const userType = req.user?.userType || req.admin?.userType;
+      const userId = req.user?.id || req.admin?.id;
       const { currentPassword, newPassword } = req.body;
+
+      if (!userType || !userId) {
+        return res.status(401).json(ApiResponse.error('Unauthorized', 401));
+      }
 
       // Input validation
       if (!currentPassword || !newPassword) {
@@ -359,22 +579,31 @@ class AuthController {
           );
       }
 
-      // Get admin instance (not just data)
-      const admin = await Admin.findByPk(req.admin.id);
+      // Get user/admin instance
+      const Model = userType === 'admin' ? Admin : User;
+      const record = await Model.findByPk(userId);
 
-      if (!admin) {
-        return res.status(404).json(ApiResponse.error('Admin not found', 404));
+      if (!record) {
+        return res
+          .status(404)
+          .json(
+            ApiResponse.error(
+              `${userType === 'admin' ? 'Admin' : 'User'} not found`,
+              404
+            )
+          );
       }
 
       // Verify current password
       const isCurrentPasswordValid =
-        await admin.validatePassword(currentPassword);
+        await record.validatePassword(currentPassword);
 
       if (!isCurrentPasswordValid) {
         logger.warn(
-          `Invalid current password attempt by admin: ${admin.email}`,
+          `Invalid current password attempt by ${userType}: ${record.email}`,
           {
-            adminId: admin.id,
+            userId: record.id,
+            userType: userType,
             ip: req.ip,
           }
         );
@@ -384,7 +613,7 @@ class AuthController {
       }
 
       // Check if new password is different from current
-      const isSamePassword = await admin.validatePassword(newPassword);
+      const isSamePassword = await record.validatePassword(newPassword);
       if (isSamePassword) {
         return res
           .status(400)
@@ -396,21 +625,26 @@ class AuthController {
           );
       }
 
-      // Update password (will be hashed by model hook)
-      await admin.update({ password: newPassword });
+      // Update password
+      await record.update({ password: newPassword });
 
-      logger.info(`Password changed successfully for admin: ${admin.email}`, {
-        adminId: admin.id,
-        ip: req.ip,
-      });
+      logger.info(
+        `Password changed successfully for ${userType}: ${record.email}`,
+        {
+          userId: record.id,
+          userType: userType,
+          ip: req.ip,
+        }
+      );
 
       // Send email notification
       try {
-        await emailService.sendPasswordChangeNotification(admin);
+        await emailService.sendPasswordChangeNotification(record);
       } catch (emailError) {
         logger.warn('Failed to send password change notification email:', {
           error: emailError.message,
-          adminId: admin.id,
+          userId: record.id,
+          userType: userType,
         });
       }
 
@@ -418,25 +652,32 @@ class AuthController {
     } catch (error) {
       logger.error('Change password error:', {
         error: error.message,
-        adminId: req.admin?.id,
+        userId: req.user?.id || req.admin?.id,
+        userType: req.user?.userType || req.admin?.userType,
       });
       res.status(500).json(ApiResponse.error('Internal server error', 500));
     }
   }
 
   /**
-   * Admin Logout
-   * POST /api/admin/auth/logout
+   * Logout (works for both admin and user)
+   * POST /api/admin/auth/logout or /api/auth/logout
    */
   static async logout(req, res) {
     try {
-      const admin = req.admin;
+      const userType = req.user?.userType || req.admin?.userType;
+      const record = req.user || req.admin;
+
+      if (!record) {
+        return res.status(401).json(ApiResponse.error('Unauthorized', 401));
+      }
 
       // In production, implement token blacklisting here
       // Example: await TokenBlacklist.create({ token: req.token, expiresAt: req.tokenExp });
 
-      logger.info(`Admin logout: ${admin.email}`, {
-        adminId: admin.id,
+      logger.info(`${userType} logout: ${record.email}`, {
+        userId: record.id,
+        userType: userType,
         ip: req.ip,
       });
 
@@ -444,15 +685,16 @@ class AuthController {
     } catch (error) {
       logger.error('Logout error:', {
         error: error.message,
-        adminId: req.admin?.id,
+        userId: req.user?.id || req.admin?.id,
+        userType: req.user?.userType || req.admin?.userType,
       });
       res.status(500).json(ApiResponse.error('Internal server error', 500));
     }
   }
 
   /**
-   * Refresh Access Token
-   * POST /api/admin/auth/refresh-token
+   * Refresh Access Token (works for both admin and user)
+   * POST /api/admin/auth/refresh-token or /api/auth/refresh-token
    */
   static async refreshToken(req, res) {
     const { refreshToken } = req.body;
@@ -464,11 +706,8 @@ class AuthController {
     }
 
     try {
-      // Verify the refresh token using the refresh secret only
-      const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET, {
-        issuer: process.env.JWT_ISSUER || 'admin-panel',
-        audience: process.env.JWT_AUDIENCE || 'admin-users',
-      });
+      // Verify the refresh token
+      const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
 
       // Ensure the token type is 'refresh'
       if (decoded.type !== 'refresh') {
@@ -481,17 +720,32 @@ class AuthController {
           .json(ApiResponse.error('Invalid token type', 401));
       }
 
-      // Check if admin exists and is active
-      const admin = await Admin.findByPk(decoded.id);
-      if (!admin || !admin.isActive) {
-        logger.warn('Inactive or missing admin during token refresh', {
-          adminId: decoded.id,
+      const userType = decoded.userType;
+      if (!userType || !['admin', 'user'].includes(userType)) {
+        logger.warn('Invalid or missing user type in refresh token', {
+          ip: req.ip,
+          userType: userType,
+        });
+        return res.status(401).json(ApiResponse.error('Invalid token', 401));
+      }
+
+      // Check if user/admin exists and is active
+      const Model = userType === 'admin' ? Admin : User;
+      const record = await Model.findByPk(decoded.id);
+
+      if (!record || !record.isActive) {
+        logger.warn(`Inactive or missing ${userType} during token refresh`, {
+          userId: decoded.id,
+          userType: userType,
           ip: req.ip,
         });
         return res
           .status(401)
           .json(
-            ApiResponse.error('Invalid refresh token or admin inactive', 401)
+            ApiResponse.error(
+              `Invalid refresh token or ${userType} inactive`,
+              401
+            )
           );
       }
 
@@ -500,11 +754,26 @@ class AuthController {
 
       // Prepare payload for new access token
       const newAccessTokenPayload = {
-        id: admin.id,
-        email: admin.email,
-        role: admin.role,
+        id: record.id,
+        email: record.email,
         sessionId: newSessionId,
+        userType: userType,
       };
+
+      // Add role for admin
+      if (userType === 'admin') {
+        newAccessTokenPayload.role = record.role;
+      }
+
+      // Set appropriate issuer/audience based on user type
+      const issuer =
+        userType === 'admin'
+          ? process.env.JWT_ISSUER || 'admin-panel'
+          : process.env.JWT_ISSUER || 'user-app';
+      const audience =
+        userType === 'admin'
+          ? process.env.JWT_AUDIENCE || 'admin-users'
+          : process.env.JWT_AUDIENCE || 'app-users';
 
       // Sign new access token
       const newAccessToken = jwt.sign(
@@ -512,28 +781,30 @@ class AuthController {
         process.env.JWT_SECRET,
         {
           expiresIn: process.env.JWT_EXPIRES_IN || '24h',
-          issuer: process.env.JWT_ISSUER || 'admin-panel',
-          audience: process.env.JWT_AUDIENCE || 'admin-users',
+          issuer: issuer,
+          audience: audience,
         }
       );
 
       // Sign new refresh token
       const newRefreshToken = jwt.sign(
         {
-          id: admin.id,
+          id: record.id,
           sessionId: newSessionId,
           type: 'refresh',
+          userType: userType,
         },
         process.env.JWT_REFRESH_SECRET,
         {
           expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
-          issuer: process.env.JWT_ISSUER || 'admin-panel',
-          audience: process.env.JWT_AUDIENCE || 'admin-users',
+          issuer: issuer,
+          audience: audience,
         }
       );
 
-      logger.info('Token refreshed successfully', {
-        adminId: admin.id,
+      logger.info(`Token refreshed successfully for ${userType}`, {
+        userId: record.id,
+        userType: userType,
         ip: req.ip,
       });
 
@@ -543,6 +814,7 @@ class AuthController {
             token: newAccessToken,
             refreshToken: newRefreshToken,
             expiresIn: process.env.JWT_EXPIRES_IN || '24h',
+            userType: userType,
             sessionInfo: {
               sessionId: newSessionId,
               refreshedAt: new Date().toISOString(),
@@ -563,20 +835,24 @@ class AuthController {
   }
 
   /**
-   * Get Admin Permissions
+   * Get Admin Permissions (Admin only)
    * GET /api/admin/auth/permissions
    */
   static async getPermissions(req, res) {
     try {
       const admin = req.admin;
-      const role = admin.role;
 
-      // Get permissions for the admin's role
+      if (!admin || admin.userType !== 'admin') {
+        return res
+          .status(403)
+          .json(ApiResponse.error('Admin access required', 403));
+      }
+
+      const role = admin.role;
       const permissions = PermissionManager.getPermissionsByRole(role);
       const permissionGroups = PermissionManager.getPermissionGroups(role);
       const modules = PermissionManager.getModules();
 
-      // Filter modules based on permissions
       const accessibleModules = modules.filter((module) => {
         return permissions.some((permission) =>
           permission.startsWith(module.key)
@@ -610,13 +886,19 @@ class AuthController {
   }
 
   /**
-   * Check Specific Permission
+   * Check Specific Permission (Admin only)
    * GET /api/admin/auth/permissions/check/:permission
    */
   static async checkPermission(req, res) {
     try {
       const { permission } = req.params;
       const admin = req.admin;
+
+      if (!admin || admin.userType !== 'admin') {
+        return res
+          .status(403)
+          .json(ApiResponse.error('Admin access required', 403));
+      }
 
       if (!permission) {
         return res
@@ -655,70 +937,87 @@ class AuthController {
   }
 
   /**
-   * Forgot Password - Send Reset Email
-   * POST /api/admin/auth/forgot-password
+   * Forgot Password (works for both admin and user)
+   * POST /api/admin/auth/forgot-password or /api/auth/forgot-password
    */
   static async forgotPassword(req, res) {
     try {
-      const { email } = req.body;
+      const { emailOrNumber, userType = 'user' } = req.body;
 
-      if (!email) {
+      if (!emailOrNumber) {
         return res
           .status(400)
-          .json(ApiResponse.error('Email is required', 400));
+          .json(ApiResponse.error('Email or phone number is required', 400));
       }
 
-      const normalizedEmail = email.trim().toLowerCase();
-      const admin = await Admin.findOne({
-        where: { email: normalizedEmail },
-      });
+      if (!['admin', 'user'].includes(userType)) {
+        return res
+          .status(400)
+          .json(ApiResponse.error('Invalid user type', 400));
+      }
 
-      // Always return success message for security
+      // Regex patterns
+      const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const phonePattern = /^[0-9]{10,15}$/;
+
+      const trimmedInput = emailOrNumber.trim();
+      const isEmail = emailPattern.test(trimmedInput);
+      const isPhone = phonePattern.test(trimmedInput);
+
+      if (!isEmail && !isPhone) {
+        return res
+          .status(400)
+          .json(ApiResponse.error('Invalid email or phone number format', 400));
+      }
+
+      const normalizedInput = isEmail
+        ? trimmedInput.toLowerCase()
+        : trimmedInput;
+
+      const whereClause = isEmail
+        ? { email: normalizedInput }
+        : { phone: normalizedInput };
+
+      const record = await Admin.findOne({ where: whereClause });
+
       const successMessage =
-        'If an account with that email exists, a password reset link has been sent.';
+        'If an account with the provided information exists, a password reset link has been sent.';
 
-      if (!admin) {
+      if (!record || !record.isActive) {
         logger.warn(
-          `Password reset requested for non-existent email: ${normalizedEmail}`,
+          `Password reset requested for non-existent or inactive ${userType}: ${normalizedInput}`,
           {
             ip: req.ip,
+            userType: userType,
           }
         );
         return res.json(ApiResponse.success(null, successMessage));
       }
 
-      if (!admin.isActive) {
-        logger.warn(
-          `Password reset requested for inactive account: ${normalizedEmail}`,
-          {
-            ip: req.ip,
-          }
-        );
-        return res.json(ApiResponse.success(null, successMessage));
-      }
-
-      // Generate cryptographically secure reset token
       const resetToken = crypto.randomBytes(32).toString('hex');
       const resetTokenExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
 
-      // Save reset token to admin record
-      await admin.update({
+      await record.update({
         resetPasswordToken: resetToken,
         resetPasswordExpires: resetTokenExpiry,
       });
 
-      // Send reset email
       try {
-        await EmailService.sendPasswordResetEmail(admin, resetToken);
-        logger.info(`Password reset email sent to: ${normalizedEmail}`, {
-          adminId: admin.id,
-          ip: req.ip,
-        });
+        await EmailService.sendPasswordResetEmail(record, resetToken, userType);
+        logger.info(
+          `Password reset email sent to ${userType}: ${normalizedInput}`,
+          {
+            userId: record.id,
+            userType: userType,
+            ip: req.ip,
+          }
+        );
       } catch (emailError) {
         logger.error('Failed to send password reset email:', {
           error: emailError.message,
-          email: normalizedEmail,
-          adminId: admin.id,
+          user: normalizedInput,
+          userId: record.id,
+          userType: userType,
         });
         return res
           .status(500)
@@ -734,7 +1033,8 @@ class AuthController {
     } catch (error) {
       logger.error('Forgot password error:', {
         error: error.message,
-        email: req.body?.email,
+        input: req.body?.emailOrNumber,
+        userType: req.body?.userType,
         ip: req.ip,
       });
       res.status(500).json(ApiResponse.error('Internal server error', 500));
@@ -742,17 +1042,23 @@ class AuthController {
   }
 
   /**
-   * Reset Password with Token
-   * POST /api/admin/auth/reset-password
+   * Reset Password with Token (works for both admin and user)
+   * POST /api/admin/auth/reset-password or /api/auth/reset-password
    */
   static async resetPassword(req, res) {
     try {
-      const { token, newPassword } = req.body;
+      const { token, newPassword, userType = 'user' } = req.body;
 
       if (!token || !newPassword) {
         return res
           .status(400)
           .json(ApiResponse.error('Token and new password are required', 400));
+      }
+
+      if (!['admin', 'user'].includes(userType)) {
+        return res
+          .status(400)
+          .json(ApiResponse.error('Invalid user type', 400));
       }
 
       if (newPassword.length < 8) {
@@ -766,8 +1072,9 @@ class AuthController {
           );
       }
 
-      // Find admin with valid reset token
-      const admin = await Admin.findOne({
+      // Find record with valid reset token
+      const Model = userType === 'admin' ? Admin : User;
+      const record = await Model.findOne({
         where: {
           resetPasswordToken: token,
           resetPasswordExpires: { [Op.gt]: new Date() },
@@ -775,9 +1082,10 @@ class AuthController {
         },
       });
 
-      if (!admin) {
-        logger.warn('Invalid or expired reset token attempt', {
+      if (!record) {
+        logger.warn(`Invalid or expired reset token attempt for ${userType}`, {
           token: token.substring(0, 8) + '...',
+          userType: userType,
           ip: req.ip,
         });
         return res
@@ -785,9 +1093,9 @@ class AuthController {
           .json(ApiResponse.error('Invalid or expired reset token', 400));
       }
 
-      // Check if new password is different from current (if possible)
+      // Check if new password is different from current
       try {
-        const isSamePassword = await admin.validatePassword(newPassword);
+        const isSamePassword = await record.validatePassword(newPassword);
         if (isSamePassword) {
           return res
             .status(400)
@@ -799,7 +1107,6 @@ class AuthController {
             );
         }
       } catch (compareError) {
-        // Continue if comparison fails - better to allow reset than block it
         logger.warn(
           'Password comparison failed during reset:',
           compareError.message
@@ -807,26 +1114,31 @@ class AuthController {
       }
 
       // Update password and clear reset token
-      await admin.update({
-        password: newPassword, // Will be hashed by model hook
+      await record.update({
+        password: newPassword,
         resetPasswordToken: null,
         resetPasswordExpires: null,
-        loginAttempts: 0, // Reset failed login attempts
-        lockUntil: null, // Unlock account if it was locked
+        loginAttempts: 0,
+        lockUntil: null,
       });
 
-      logger.info(`Password reset successful for admin: ${admin.email}`, {
-        adminId: admin.id,
-        ip: req.ip,
-      });
+      logger.info(
+        `Password reset successful for ${userType}: ${record.email}`,
+        {
+          userId: record.id,
+          userType: userType,
+          ip: req.ip,
+        }
+      );
 
       // Send confirmation email
       try {
-        await EmailService.sendPasswordResetConfirmation(admin);
+        await EmailService.sendPasswordResetConfirmation(record, userType);
       } catch (emailError) {
         logger.warn('Failed to send password reset confirmation email:', {
           error: emailError.message,
-          adminId: admin.id,
+          userId: record.id,
+          userType: userType,
         });
       }
 
@@ -839,6 +1151,7 @@ class AuthController {
     } catch (error) {
       logger.error('Reset password error:', {
         error: error.message,
+        userType: req.body?.userType,
         ip: req.ip,
       });
       res.status(500).json(ApiResponse.error('Internal server error', 500));
@@ -846,90 +1159,159 @@ class AuthController {
   }
 
   /**
-   * Validate Reset Token
-   * GET /api/admin/auth/validate-reset-token/:token
+   * User Registration
+   * POST /api/auth/register
    */
-  static async validateResetToken(req, res) {
+  static async register(req, res) {
     try {
-      const { token } = req.params;
+      const { email, password, fullName, username } = req.body;
 
-      if (!token) {
+      // Input validation
+      if (!email || !password || !fullName) {
         return res
           .status(400)
-          .json(ApiResponse.error('Token is required', 400));
+          .json(
+            ApiResponse.error(
+              'Email, password, and full name are required',
+              400
+            )
+          );
       }
 
-      const admin = await Admin.findOne({
-        where: {
-          resetPasswordToken: token,
-          resetPasswordExpires: { [Op.gt]: new Date() },
-          isActive: true,
-        },
-        attributes: ['id', 'email', 'fullName', 'resetPasswordExpires'],
+      if (password.length < 8) {
+        return res
+          .status(400)
+          .json(
+            ApiResponse.error(
+              'Password must be at least 8 characters long',
+              400
+            )
+          );
+      }
+
+      const normalizedEmail = email.trim().toLowerCase();
+
+      // Check if user already exists
+      const existingUser = await User.findOne({
+        where: { email: normalizedEmail },
       });
 
-      if (!admin) {
+      if (existingUser) {
         return res
           .status(400)
-          .json(ApiResponse.error('Invalid or expired reset token', 400));
+          .json(ApiResponse.error('User with this email already exists', 400));
       }
 
-      const timeRemaining = Math.floor(
-        (admin.resetPasswordExpires - new Date()) / 1000 / 60
-      );
+      // Check username if provided
+      if (username) {
+        const existingUsername = await User.findOne({
+          where: { username: username.trim().toLowerCase() },
+        });
 
-      res.json(
+        if (existingUsername) {
+          return res
+            .status(400)
+            .json(ApiResponse.error('Username already taken', 400));
+        }
+      }
+
+      // Create user
+      const userData = {
+        email: normalizedEmail,
+        password,
+        fullName: fullName.trim(),
+        username: username ? username.trim().toLowerCase() : null,
+        isActive: true,
+        emailVerified: false,
+      };
+
+      const user = await User.create(userData);
+
+      logger.info(`New user registered: ${normalizedEmail}`, {
+        userId: user.id,
+        ip: req.ip,
+      });
+
+      // Send verification email
+      try {
+        await emailService.sendEmailVerification(user);
+      } catch (emailError) {
+        logger.warn('Failed to send verification email:', {
+          error: emailError.message,
+          userId: user.id,
+        });
+      }
+
+      res.status(201).json(
         ApiResponse.success(
           {
-            valid: true,
-            email: admin.email,
-            timeRemaining: timeRemaining,
-            expiresAt: admin.resetPasswordExpires,
+            user: user.toJSON(),
+            message:
+              'Registration successful. Please check your email to verify your account.',
           },
-          'Token is valid'
+          'User registered successfully'
         )
       );
     } catch (error) {
-      logger.error('Validate reset token error:', {
+      logger.error('Registration error:', {
         error: error.message,
-        token: req.params?.token?.substring(0, 8) + '...',
+        email: req.body?.email,
+        ip: req.ip,
       });
       res.status(500).json(ApiResponse.error('Internal server error', 500));
     }
   }
 
   /**
-   * Upload Avatar
-   * POST /api/admin/auth/upload-avatar
+   * Upload Avatar (works for both admin and user)
+   * POST /api/admin/auth/upload-avatar or /api/auth/upload-avatar
    */
   static async uploadAvatar(req, res) {
     try {
+      const userType = req.user?.userType || req.admin?.userType;
+      const userId = req.user?.id || req.admin?.id;
+
       if (!req.file) {
         return res
           .status(400)
           .json(ApiResponse.error('No image file provided', 400));
       }
 
-      const admin = await Admin.findByPk(req.admin.id);
-      if (!admin) {
-        return res.status(404).json(ApiResponse.error('Admin not found', 404));
+      if (!userType || !userId) {
+        return res.status(401).json(ApiResponse.error('Unauthorized', 401));
+      }
+
+      const Model = userType === 'admin' ? Admin : User;
+      const record = await Model.findByPk(userId);
+
+      if (!record) {
+        return res
+          .status(404)
+          .json(
+            ApiResponse.error(
+              `${userType === 'admin' ? 'Admin' : 'User'} not found`,
+              404
+            )
+          );
       }
 
       const avatarPath = `/uploads/avatars/${req.file.filename}`;
 
-      // Update admin avatar
-      await admin.update({ avatar: avatarPath });
+      // Update avatar
+      await record.update({ avatar: avatarPath });
 
-      logger.info(`Avatar uploaded for admin: ${admin.email}`, {
-        adminId: admin.id,
+      logger.info(`Avatar uploaded for ${userType}: ${record.email}`, {
+        userId: record.id,
+        userType: userType,
         filename: req.file.filename,
       });
 
+      const responseKey = userType === 'admin' ? 'admin' : 'user';
       res.json(
         ApiResponse.success(
           {
             avatarUrl: avatarPath,
-            admin: admin.toJSON(),
+            [responseKey]: { ...record.toJSON(), userType },
           },
           'Avatar uploaded successfully'
         )
@@ -937,7 +1319,8 @@ class AuthController {
     } catch (error) {
       logger.error('Upload avatar error:', {
         error: error.message,
-        adminId: req.admin?.id,
+        userId: req.user?.id || req.admin?.id,
+        userType: req.user?.userType || req.admin?.userType,
       });
       res.status(500).json(ApiResponse.error('Internal server error', 500));
     }

@@ -1,11 +1,17 @@
 import React, { useState } from 'react';
-import { Menu, X, ChevronDown, LogOut } from 'lucide-react';
+import { Menu, X } from 'lucide-react';
 import pravasiLogo from '../../assets/images/pravasi-logo.png';
-import SignupModal from '../SignUpModal';
 import LoginModal from '../LoginModal';
-import ProfileModal from '../ProfileModal'; // Import the ProfileModal
+import ProfileModal from '../ProfileModal';
 import CreditCardIcon from '../../assets/icons/CreditCardIcon';
 import ActivateModal from '../ActivateModal';
+import SignupModal from '../SignupModal';
+import { useAuth } from '../../constants/AuthContext';
+import ManageCardsModal from '../ManageCardsModal';
+import OTPModal from '../OTPModal';
+import DiscountCard from '../DiscountCard';
+import { usersAPI } from '../../services/api';
+import PrivilegeCard from '../PrivilegeCard';
 
 const Header = ({ onNavigate }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -15,22 +21,84 @@ const Header = ({ onNavigate }) => {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [newUserData, setNewUserData] = useState(null);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [user, setUser] = useState({
-    name: 'Godzilla D.White',
-    email: 'godzillaDwhite@gmail.com',
-    phone: '+91 832487778',
-    location: 'Kochi',
-    avatar:
-      'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face',
-  });
-
+  const [activeSection, setActiveSection] = useState('home');
+  const { user, isAuthenticated, isLoading, logout } = useAuth();
+  const [userData, setUserData] = useState(null);
+  const [isManageCardsModalOpen, setIsManageCardsModalOpen] = useState(false);
+  const [isOTPModalOpen, setIsOTPModalOpen] = useState(false);
+  const [otpSessionId, setOtpSessionId] = useState(null);
+  const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
+  const [isPrivilegeCardModalOpen, setIsPrivilegeCardModalOpen] =
+    useState(false);
   const navItems = [
-    { name: 'Home', href: '/', active: true },
-    { name: 'How It Works', href: '#' },
-    { name: 'FAQs', href: '#' },
-    { name: 'Contact Us', href: '#' },
+    {
+      name: 'Home',
+      section: 'home',
+      active: activeSection === 'home',
+      href: '/',
+    },
+    {
+      name: 'How It Works',
+      section: 'how-it-works',
+      active: activeSection === 'how-it-works',
+      href: '/#how-it-works',
+    },
+    {
+      name: 'FAQs',
+      section: 'faqs',
+      active: activeSection === 'faqs',
+      href: '/#faqs',
+    },
+    {
+      name: 'Contact Us',
+      section: 'contact-us',
+      active: activeSection === 'contact-us',
+      href: '/#contact-us',
+    },
   ];
+
+  // Function to scroll to a specific section
+  const scrollToSection = (sectionId) => {
+    const element = document.getElementById(sectionId);
+    if (element) {
+      const headerHeight = 80;
+      const elementPosition = element.getBoundingClientRect().top;
+      const offsetPosition =
+        elementPosition + window.pageYOffset - headerHeight;
+
+      window.scrollTo({
+        top: offsetPosition,
+        behavior: 'smooth',
+      });
+
+      setActiveSection(sectionId);
+      setIsMenuOpen(false);
+    }
+  };
+
+  const handleClosePrivilegeCardModal = () => {
+    setIsPrivilegeCardModalOpen(false);
+  };
+
+  const handleNavClick = (e, section) => {
+    e.preventDefault();
+
+    if (section === 'home') {
+      // For home, navigate to the route and scroll to top
+      if (onNavigate) {
+        onNavigate('home'); // This handles route navigation
+      }
+      window.scrollTo({
+        top: 0,
+        behavior: 'smooth',
+      });
+      setActiveSection('home');
+      setIsMenuOpen(false); // Close mobile menu if open
+    } else {
+      // For other sections, scroll to the specific section
+      scrollToSection(section);
+    }
+  };
 
   const handleLoginClick = () => {
     setIsLoginModalOpen(true);
@@ -49,6 +117,11 @@ const Header = ({ onNavigate }) => {
   };
 
   const handleLogoClick = () => {
+    window.scrollTo({
+      top: 0,
+      behavior: 'smooth',
+    });
+    setActiveSection('home');
     onNavigate('home');
   };
 
@@ -56,32 +129,37 @@ const Header = ({ onNavigate }) => {
     onNavigate('shop-registration');
   };
 
-  const handleLogout = () => {
-    setIsLoggedIn(false);
-    setUser({ name: '', email: '', phone: '', location: '', avatar: null });
-    setIsUserMenuOpen(false);
-    setIsProfileModalOpen(false);
-    // Add your logout logic here (clear tokens, redirect, etc.)
+  const handleLogout = async () => {
+    try {
+      await logout();
+      setIsUserMenuOpen(false);
+      setIsProfileModalOpen(false);
+      if (onNavigate) onNavigate('home');
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
   };
 
   const handleManageCardClick = () => {
     setIsUserMenuOpen(false);
+    setIsManageCardsModalOpen(true);
   };
 
-  // Handle profile click - open modal and close dropdown
+  const handleCloseManageCardsModal = () => {
+    setIsManageCardsModalOpen(false);
+  };
+
   const handleProfileClick = () => {
     setIsProfileModalOpen(true);
-    setIsUserMenuOpen(false); // Close the dropdown when opening modal
+    setIsUserMenuOpen(false);
   };
 
   const handleCloseProfileModal = () => {
     setIsProfileModalOpen(false);
   };
 
+  // Handle signup success - opens ActivateModal
   const handleSignupSuccess = (userId, userData) => {
-    console.log('User created with ID:', userId);
-    console.log('User data:', userData);
-
     setNewUserData({
       id: userId,
       ...userData,
@@ -90,24 +168,166 @@ const Header = ({ onNavigate }) => {
     setShowProfileModal(true);
   };
 
+  const handleProfileCreateSuccess = async (profileData) => {
+    try {
+      // Close the ActivateModal
+      setShowProfileModal(false);
+
+      // Update userData with the profile data
+      setUserData({
+        ...newUserData,
+        ...profileData,
+      });
+
+      // Open Privilege card modal instead of OTP modal
+      setIsPrivilegeCardModalOpen(true);
+    } catch (error) {
+      console.error('Error in profile create success:', error);
+      // You might want to show an error message to the user
+    }
+  };
+
   const handleCloseProfileCreateModal = () => {
     setShowProfileModal(false);
     setNewUserData(null);
   };
 
-  // Get user initials for fallback avatar
   const getUserInitials = (name) => {
     return name
-      .split(' ')
+      ?.split(' ')
       .map((word) => word.charAt(0))
       .join('')
       .toUpperCase()
       .slice(0, 2);
   };
 
+  // Add intersection observer to update active section based on scroll position
+  React.useEffect(() => {
+    const observerOptions = {
+      root: null,
+      rootMargin: '-80px 0px -50% 0px',
+      threshold: 0,
+    };
+
+    const observerCallback = (entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          setActiveSection(entry.target.id);
+        }
+      });
+    };
+
+    const observer = new IntersectionObserver(
+      observerCallback,
+      observerOptions
+    );
+
+    const sections = ['home', 'how-it-works', 'faqs', 'contact-us'];
+    sections.forEach((sectionId) => {
+      const element = document.getElementById(sectionId);
+      if (element) {
+        observer.observe(element);
+      }
+    });
+
+    return () => {
+      sections.forEach((sectionId) => {
+        const element = document.getElementById(sectionId);
+        if (element) {
+          observer.unobserve(element);
+        }
+      });
+    };
+  }, []);
+
+  const handleCloseOTPModal = () => {
+    setIsOTPModalOpen(false);
+    setOtpSessionId(null);
+  };
+
+  const handleOTPResend = async () => {
+    try {
+      const response = await usersAPI.resendEmailOTP({
+        email: userData.email,
+        sessionId: otpSessionId,
+      });
+
+      if (response.success) {
+        setOtpSessionId(response.data.sessionId);
+        console.log('Email OTP resent successfully to:', userData.email);
+        return true;
+      } else {
+        throw new Error(response.message || 'Failed to resend OTP');
+      }
+    } catch (error) {
+      console.error('Error resending Email OTP:', error);
+      throw error;
+    }
+  };
+
+  // OTP verification handler - opens DiscountCard on success
+  const handleOTPVerify = async (otpCode) => {
+    try {
+      const response = await usersAPI.verifyEmailOTP({
+        otp: otpCode,
+        sessionId: otpSessionId,
+        email: userData.email,
+      });
+
+      if (response.success) {
+        // Close OTP modal and open discount card modal
+        setIsOTPModalOpen(false);
+        setOtpSessionId(null);
+        setIsSuccessModalOpen(true);
+
+        console.log('Card activation successful:', response);
+      } else {
+        throw new Error(response.message || 'Invalid OTP');
+      }
+    } catch (error) {
+      console.error('OTP verification failed:', error);
+      throw error;
+    }
+  };
+
+  // Handler for closing success modal (DiscountCard)
+  const handleCloseSuccessModal = () => {
+    setIsSuccessModalOpen(false);
+    setIsManageCardsModalOpen(false);
+    // Reset the flow
+    setNewUserData(null);
+  };
+
+  // Handler for opening OTP modal from ManageCardsModal
+  const handleOpenOTPModal = (sessionId) => {
+    setOtpSessionId(sessionId);
+    setIsOTPModalOpen(true);
+    setIsManageCardsModalOpen(false);
+  };
+
+  const handleActivateCard = async () => {
+    setIsLoginModalOpen(true);
+    setIsPrivilegeCardModalOpen(false);
+  };
+
+  React.useEffect(() => {
+    try {
+      const storedUser = localStorage.getItem('userData');
+      if (storedUser) {
+        const parsedUser = JSON.parse(storedUser);
+        setUserData(parsedUser);
+        console.log('User email:', parsedUser);
+      } else {
+        console.log('No user data found');
+      }
+    } catch (error) {
+      console.error('Failed to parse user data from localStorage:', error);
+    }
+  }, []);
+  console.log({ isSuccessModalOpen });
   return (
     <>
-      <header className="bg-white shadow-sm sticky top-0 z-999">
+      <header className="bg-white shadow-sm sticky top-0 z-50">
         <div className="pr-5">
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
@@ -126,12 +346,13 @@ const Header = ({ onNavigate }) => {
               {navItems.map((item) => (
                 <a
                   key={item.name}
-                  href={item.href}
+                  href={`${item.href}`}
+                  onClick={(e) => handleNavClick(e, item.section)}
                   className={`${
                     item.active
                       ? 'text-[#3D3C96] border-b-2 border-[#3D3C96] pb-1'
                       : 'text-black hover:text-[#3D3C96]'
-                  } font-semibold transition-colors duration-200 font-figtree`}
+                  } font-semibold transition-colors duration-200 font-figtree cursor-pointer`}
                 >
                   {item.name}
                 </a>
@@ -143,14 +364,13 @@ const Header = ({ onNavigate }) => {
               <span className="text-black font-figtree">Help</span>
               <span className="text-black">|</span>
 
-              {isLoggedIn ? (
+              {isAuthenticated && user ? (
                 // User Avatar and Dropdown
                 <div className="relative">
                   <button
                     onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
                     className="flex items-center space-x-2 text-black hover:text-[#3D3C96] transition-colors"
                   >
-                    {/* User Avatar */}
                     <div className="w-8 h-8 rounded-full overflow-hidden">
                       {user.avatar ? (
                         <img
@@ -160,7 +380,7 @@ const Header = ({ onNavigate }) => {
                         />
                       ) : (
                         <div className="w-full h-full bg-[#3D3C96] flex items-center justify-center text-white text-xs font-semibold">
-                          {getUserInitials(user.name)}
+                          {getUserInitials(user.fullName || user?.email)}
                         </div>
                       )}
                     </div>
@@ -168,38 +388,36 @@ const Header = ({ onNavigate }) => {
 
                   {/* Dropdown Menu */}
                   {isUserMenuOpen && (
-                    <div className="absolute font-figtree right-0 mt-2 w-72 bg-[#F3F3F3] rounded-2xl shadow-xl border border-gray-100 overflow-hidden z-50">
-                      {/* User Info Section - Clickable to open profile modal */}
+                    <div className="absolute font-figtree right-0 mt-2 w-72 bg-[#F3F3F3] rounded-2xl shadow-xl border border-gray-100 overflow-hidden z-[9999]">
                       <button
                         onClick={handleProfileClick}
                         className="w-full px-6 pt-4 pb-2 border-b border-[#DDDBDB] hover:bg-gray-50 transition-colors text-left"
                       >
                         <div className="flex items-center space-x-3">
                           <div className="w-12 h-12 rounded-full overflow-hidden">
-                            {user.avatar ? (
+                            {user?.avatar ? (
                               <img
                                 src={user.avatar}
-                                alt={user.name}
+                                alt={user.fullName}
                                 className="w-full h-full object-cover"
                               />
                             ) : (
                               <div className="w-full h-full bg-[#3D3C96] flex items-center justify-center text-white text-sm font-semibold">
-                                {getUserInitials(user.name)}
+                                {getUserInitials(user?.fullName || user?.email)}
                               </div>
                             )}
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-semibold text-black truncate">
-                              {user.name}
+                              {user?.fullName}
                             </p>
                             <p className="text-xs font-normal text-[#A8A8A8] truncate">
-                              {user.email}
+                              {user?.email}
                             </p>
                           </div>
                         </div>
                       </button>
 
-                      {/* Menu Items */}
                       <div className="py-1">
                         <button
                           onClick={handleManageCardClick}
@@ -314,10 +532,11 @@ const Header = ({ onNavigate }) => {
                 {navItems.map((item) => (
                   <a
                     key={item.name}
-                    href={item.href}
+                    href={`#${item.section}`}
+                    onClick={(e) => handleNavClick(e, item.section)}
                     className={`${
                       item.active ? 'text-blue-600' : 'text-gray-600'
-                    } font-medium`}
+                    } font-medium hover:text-blue-600 transition-colors`}
                   >
                     {item.name}
                   </a>
@@ -334,8 +553,7 @@ const Header = ({ onNavigate }) => {
                     <span className="text-gray-600">Help</span>
                     <span className="text-black">|</span>
 
-                    {isLoggedIn ? (
-                      // Mobile User Info - Clickable to open profile modal
+                    {isAuthenticated && user ? (
                       <div className="flex flex-col space-y-2">
                         <button
                           onClick={handleProfileClick}
@@ -350,7 +568,7 @@ const Header = ({ onNavigate }) => {
                               />
                             ) : (
                               <div className="w-full h-full bg-[#3D3C96] flex items-center justify-center text-white text-xs font-semibold">
-                                {getUserInitials(user.name)}
+                                {getUserInitials(user?.fullName || user?.email)}
                               </div>
                             )}
                           </div>
@@ -374,7 +592,6 @@ const Header = ({ onNavigate }) => {
                         </div>
                       </div>
                     ) : (
-                      // Mobile Login/Signup
                       <div className="flex items-center space-x-4">
                         <button
                           onClick={handleLoginClick}
@@ -407,7 +624,7 @@ const Header = ({ onNavigate }) => {
         />
       )}
 
-      {/* Signup Modal */}
+      {/* Modals */}
       <SignupModal
         isOpen={isSignupModalOpen}
         onClose={handleCloseSignupModal}
@@ -415,27 +632,64 @@ const Header = ({ onNavigate }) => {
         onSignupSuccess={handleSignupSuccess}
       />
 
-      {/* Login Modal */}
       <LoginModal
         isOpen={isLoginModalOpen}
         onClose={handleCloseLoginModal}
         onSwitchToSignup={handleSignupClick}
+        onSignupSuccess={handleSignupSuccess}
       />
 
-      {/* Profile Modal */}
       <ProfileModal
         isOpen={isProfileModalOpen}
         onClose={handleCloseProfileModal}
-        user={user}
+        user={userData}
         onLogout={handleLogout}
         getUserInitials={getUserInitials}
       />
+
+      {/* ActivateModal - Updated to handle profile creation success */}
       {showProfileModal && newUserData && (
         <ActivateModal
           isOpen={showProfileModal}
           onClose={handleCloseProfileCreateModal}
           userId={newUserData.id}
           userData={newUserData}
+          onProfileCreateSuccess={handleProfileCreateSuccess}
+        />
+      )}
+
+      {/* ManageCardsModal with OTP modal props */}
+      <ManageCardsModal
+        isOpen={isManageCardsModalOpen}
+        onClose={handleCloseManageCardsModal}
+        user={userData}
+        onOpenOTPModal={handleOpenOTPModal}
+      />
+
+      {/* Privilege Card Modal */}
+      <PrivilegeCard
+        isOpen={isPrivilegeCardModalOpen}
+        onClose={handleClosePrivilegeCardModal}
+        onActivate={handleActivateCard}
+      />
+
+      {/* OTP Modal */}
+      <OTPModal
+        isOpen={isOTPModalOpen}
+        onClose={handleCloseOTPModal}
+        onVerify={handleOTPVerify}
+        onResend={handleOTPResend}
+        userPhone={userData?.phone}
+        userName={userData?.name}
+      />
+
+      {/* Success Modal (DiscountCard) */}
+      {isSuccessModalOpen && (
+        <DiscountCard
+          isOpen={isSuccessModalOpen}
+          onClose={handleCloseSuccessModal}
+          title="Card Activated Successfully!"
+          message="Your privilege card has been activated and is ready to use."
         />
       )}
     </>
