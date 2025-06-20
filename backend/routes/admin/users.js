@@ -1,6 +1,7 @@
 const express = require('express');
 const { body, query, param } = require('express-validator');
 const UserController = require('../../controllers/admin/userController');
+const OTPAdminController = require('../../controllers/admin/OTPAdminController');
 const AuthMiddleware = require('../../middleware/auth');
 const ValidationMiddleware = require('../../middleware/validation');
 
@@ -54,6 +55,116 @@ router.get(
 // Get user statistics
 router.get('/stats', AuthMiddleware.authenticate, UserController.getUserStats);
 
+// ============= OTP MANAGEMENT ENDPOINTS =============
+
+// Get all OTP sessions with pagination, search, and filters
+router.get(
+  '/otp-sessions',
+  [
+    AuthMiddleware.authenticate,
+    AuthMiddleware.authorize('admin'),
+    query('page')
+      .optional()
+      .isInt({ min: 1 })
+      .withMessage('Page must be a positive integer'),
+    query('limit')
+      .optional()
+      .isInt({ min: 1, max: 100 })
+      .withMessage('Limit must be between 1 and 100'),
+    query('search')
+      .optional()
+      .isString()
+      .trim()
+      .withMessage('Search must be a string'),
+    query('otpType')
+      .optional()
+      .isIn(['email', 'sms'])
+      .withMessage('OTP type must be email or sms'),
+    query('purpose')
+      .optional()
+      .isIn([
+        'card_activation',
+        'email_verification',
+        'phone_verification',
+        'password_reset',
+        'account_verification',
+      ])
+      .withMessage('Invalid OTP purpose'),
+    query('isVerified')
+      .optional()
+      .isBoolean()
+      .withMessage('isVerified must be a boolean value'),
+    query('userId')
+      .optional()
+      .isInt({ min: 1 })
+      .withMessage('User ID must be a positive integer'),
+    query('startDate')
+      .optional()
+      .isISO8601()
+      .withMessage('Start date must be a valid ISO date'),
+    query('endDate')
+      .optional()
+      .isISO8601()
+      .withMessage('End date must be a valid ISO date'),
+    query('sortBy')
+      .optional()
+      .isIn(['created_at', 'expires_at', 'verified_at'])
+      .withMessage('Invalid sort field'),
+    query('sortOrder')
+      .optional()
+      .isIn(['ASC', 'DESC'])
+      .withMessage('Sort order must be ASC or DESC'),
+    ValidationMiddleware.validate,
+  ],
+  OTPAdminController.getAllOTPSessions
+);
+
+// Get OTP statistics for dashboard
+router.get(
+  '/otp-sessions/stats',
+  [AuthMiddleware.authenticate, AuthMiddleware.authorize('admin')],
+  OTPAdminController.getOTPStatistics
+);
+
+// Get OTP analytics data
+router.get(
+  '/otp-sessions/analytics',
+  [
+    AuthMiddleware.authenticate,
+    AuthMiddleware.authorize('admin'),
+    query('period')
+      .optional()
+      .isIn(['24h', '7d', '30d'])
+      .withMessage('Period must be 24h, 7d, or 30d'),
+    ValidationMiddleware.validate,
+  ],
+  OTPAdminController.getOTPAnalytics
+);
+
+// Get specific OTP session by ID
+router.get(
+  '/otp-sessions/:sessionId',
+  [
+    AuthMiddleware.authenticate,
+    AuthMiddleware.authorize('admin'),
+    param('sessionId').isUUID().withMessage('Session ID must be a valid UUID'),
+    ValidationMiddleware.validate,
+  ],
+  OTPAdminController.getOTPSessionById
+);
+
+// Manually expire OTP session (admin action)
+router.post(
+  '/otp-sessions/:sessionId/expire',
+  [
+    AuthMiddleware.authenticate,
+    AuthMiddleware.authorize('admin'),
+    param('sessionId').isUUID().withMessage('Session ID must be a valid UUID'),
+    ValidationMiddleware.validate,
+  ],
+  OTPAdminController.expireOTPSession
+);
+
 // Export users data
 router.get(
   '/export',
@@ -80,6 +191,52 @@ router.get(
     ValidationMiddleware.validate,
   ],
   UserController.getUserById
+);
+
+// ============= USER-SPECIFIC OTP ENDPOINTS =============
+
+// Get OTP sessions for specific user
+router.get(
+  '/:id/otp-sessions',
+  [
+    AuthMiddleware.authenticate,
+    AuthMiddleware.authorize('admin'),
+    param('id')
+      .isInt({ min: 1 })
+      .withMessage('User ID must be a positive integer'),
+    query('page')
+      .optional()
+      .isInt({ min: 1 })
+      .withMessage('Page must be a positive integer'),
+    query('limit')
+      .optional()
+      .isInt({ min: 1, max: 50 })
+      .withMessage('Limit must be between 1 and 50'),
+    query('otpType')
+      .optional()
+      .isIn(['email', 'sms'])
+      .withMessage('OTP type must be email or sms'),
+    query('purpose')
+      .optional()
+      .isIn([
+        'card_activation',
+        'email_verification',
+        'phone_verification',
+        'password_reset',
+        'account_verification',
+      ])
+      .withMessage('Invalid OTP purpose'),
+    query('sortBy')
+      .optional()
+      .isIn(['created_at', 'expires_at', 'verified_at'])
+      .withMessage('Invalid sort field'),
+    query('sortOrder')
+      .optional()
+      .isIn(['ASC', 'DESC'])
+      .withMessage('Sort order must be ASC or DESC'),
+    ValidationMiddleware.validate,
+  ],
+  OTPAdminController.getUserOTPSessions
 );
 
 // Update user information

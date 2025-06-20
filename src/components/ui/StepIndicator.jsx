@@ -27,7 +27,7 @@ const StepIndicator = ({
 
             {/* Connecting Line between circles */}
             {index < steps.length - 1 && (
-              <div className="w-24 lg:w-32 xl:w-48 border-t-2 border-dotted border-[#222158] mx-4"></div>
+              <div className="w-24 lg:w-32 xl:w-48 border-t-4 border-dotted border-[#222158] mx-4"></div>
             )}
           </React.Fragment>
         ))}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Search,
   MapPin,
@@ -6,7 +6,9 @@ import {
   Clock,
   ArrowLeft,
   ArrowRight,
+  Loader2,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import CategoryIcon from '../assets/icons/CategoryIcon';
 import BagBroken from '../assets/icons/BagBroken';
 import EarthBroken from '../assets/icons/EarthBroken';
@@ -16,15 +18,87 @@ import StepIndicator from '../components/ui/StepIndicator';
 import LoyaltyCard from '../components/cards/LoyaltyCard';
 import FeatureCard from '../components/cards/FeatureCard';
 import FAQ from '../components/ui/FAQ';
-import OTPModal from '../components/OtpModal';
+import { usersAPI } from '../services/api';
+import OTPModal from '../components/OTPModal';
+import DiscountCard from '../components/DiscountCard';
 
 const SearchPage = () => {
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedLocation, setSelectedLocation] = useState('');
   const [activeCategory, setActiveCategory] = useState(0);
   const [isOTPModalOpen, setIsOTPModalOpen] = useState(false);
-
   const [currentPage, setCurrentPage] = useState(0);
+  const [userLocation, setUserLocation] = useState(null);
+  const [locationName, setLocationName] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
+
+  // OTP related states
+  const [isActivating, setIsActivating] = useState(false);
+  const [otpSessionId, setOtpSessionId] = useState(null);
+
+  const [userData, setUserData] = useState({
+    email: '',
+    phone: '',
+    name: '',
+  });
+
+  // Get user's current location
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          const { latitude, longitude } = position.coords;
+          setUserLocation({ lat: latitude, lng: longitude });
+
+          // Reverse geocoding to get location name
+          try {
+            const response = await fetch(
+              `https://api.opencagedata.com/geocode/v1/json?q=${latitude}+${longitude}&key=YOUR_API_KEY`
+            );
+            const data = await response.json();
+            if (data.results && data.results.length > 0) {
+              const city =
+                data.results[0].components.city ||
+                data.results[0].components.town ||
+                data.results[0].components.village;
+              const state = data.results[0].components.state;
+              setLocationName(`${city}, ${state}`);
+            }
+          } catch (error) {
+            console.error('Error getting location name:', error);
+            setLocationName('Current Location');
+          }
+        },
+        (error) => {
+          console.error('Error getting location:', error);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 300000,
+        }
+      );
+    }
+  }, []);
+
+  useEffect(() => {
+    const storedUser = localStorage.getItem('userData');
+    if (storedUser) {
+      try {
+        const parsedUser = JSON.parse(storedUser);
+        setUserData({
+          email: parsedUser?.email || '',
+          phone: parsedUser?.phone || '',
+          name: parsedUser?.fullName || '',
+        });
+      } catch (error) {
+        console.error('Failed to parse user data from localStorage:', error);
+      }
+    }
+  }, []);
+
   const categories = [
     { name: 'Shopping', iconName: 'Shopping', color: 'bg-[#1C1061]' },
     { name: 'Healthcare', iconName: 'Healthcare', color: 'bg-[#0065B3]' },
@@ -39,12 +113,74 @@ const SearchPage = () => {
   const categoriesPerPage = 4;
   const totalPages = Math.ceil(categories.length / categoriesPerPage);
 
-  // Add this new function
   const getCurrentCategories = () => {
     const startIndex = currentPage * categoriesPerPage;
     const endIndex = startIndex + categoriesPerPage;
     return categories.slice(startIndex, endIndex);
   };
+
+  useEffect(() => {
+    const handleCategoryFromHomePage = () => {
+      try {
+        // First check navigation state
+        if (location.state?.selectedCategory && location.state?.fromHomePage) {
+          const { selectedCategory } = location.state;
+          console.log('Category selected from HomePage:', selectedCategory);
+
+          // Set the search query to the category name
+          setSearchQuery(selectedCategory.name);
+
+          // Find the category in the current categories array and set the page/index appropriately
+          const categoryIndex = categories.findIndex(
+            (cat) => cat.name === selectedCategory.name
+          );
+          if (categoryIndex !== -1) {
+            const pageIndex = Math.floor(categoryIndex / categoriesPerPage);
+            const categoryOnPage = categoryIndex % categoriesPerPage;
+
+            setCurrentPage(pageIndex);
+            setActiveCategory(categoryOnPage);
+          }
+
+          // Clear the navigation state to prevent re-triggering
+          window.history.replaceState({}, document.title);
+        }
+        // Fallback to sessionStorage
+        else {
+          const storedCategory = sessionStorage.getItem('selectedCategory');
+          if (storedCategory) {
+            try {
+              const selectedCategory = JSON.parse(storedCategory);
+              console.log('Category from sessionStorage:', selectedCategory);
+
+              setSearchQuery(selectedCategory.name);
+
+              // Find the category and set appropriate page/index
+              const categoryIndex = categories.findIndex(
+                (cat) => cat.name === selectedCategory.name
+              );
+              if (categoryIndex !== -1) {
+                const pageIndex = Math.floor(categoryIndex / categoriesPerPage);
+                const categoryOnPage = categoryIndex % categoriesPerPage;
+
+                setCurrentPage(pageIndex);
+                setActiveCategory(categoryOnPage);
+              }
+
+              // Clear sessionStorage after using
+              sessionStorage.removeItem('selectedCategory');
+            } catch (error) {
+              console.error('Error parsing stored category:', error);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error handling category from HomePage:', error);
+      }
+    };
+
+    handleCategoryFromHomePage();
+  }, [location.state, categories, categoriesPerPage]);
 
   const nextCategory = () => {
     setCurrentPage((prevPage) => {
@@ -62,22 +198,351 @@ const SearchPage = () => {
     setActiveCategory(0);
   };
 
-  const handleCategoryClick = (index) => {
+  const handleCategoryClick = async (index) => {
     setActiveCategory(index);
+
+    // Get the actual category from the current page
+    const currentCategories = getCurrentCategories();
+    const selectedCategory = currentCategories[index];
+
+    if (selectedCategory) {
+      // Set the search query and location
+      const categoryQuery = selectedCategory.name;
+      let searchLocation = selectedLocation;
+
+      // Use current location if no location is selected
+      if (!selectedLocation && userLocation && locationName) {
+        searchLocation = locationName;
+      }
+
+      // Fallback to a default location if no location is available
+      if (!searchLocation) {
+        // Option 1: Use a default location (adjust as needed)
+        searchLocation = 'Kochi, Kerala'; // Default location
+
+        // Option 2: Or ask user to select location first
+        // alert('Please select a location from the dropdown or allow location access to search by category');
+        // return;
+
+        console.log(
+          'No location detected, using default location:',
+          searchLocation
+        );
+      }
+
+      setIsSearching(true);
+
+      try {
+        // Prepare search parameters for the backend API
+        const searchParams = {
+          search: categoryQuery.trim(),
+          location: searchLocation,
+          category: selectedCategory.name,
+          latitude: userLocation?.lat || null, // Allow null if location not available
+          longitude: userLocation?.lng || null, // Allow null if location not available
+          maxDistance: 10, // Search within 10km
+          sortBy: 'distance',
+          sortOrder: 'ASC',
+          page: 1,
+          limit: 50,
+        };
+
+        console.log('Category Search Parameters:', searchParams);
+
+        // Make API call using the usersAPI service
+        const apiResponse = await usersAPI.searchShops(searchParams);
+
+        console.log('Category API Response:', apiResponse);
+
+        // Transform the response data
+        const transformedShops = transformShopData(apiResponse);
+
+        console.log('Category Transformed Shops:', transformedShops);
+
+        // Prepare data for the results page
+        const searchResults = {
+          shops: transformedShops,
+          pagination: apiResponse.pagination || {},
+          searchMetadata: apiResponse.searchMetadata || {},
+          totalResults:
+            apiResponse.pagination?.totalRecords || transformedShops.length,
+        };
+
+        const searchParamsForResults = {
+          query: categoryQuery,
+          location: searchLocation,
+          coordinates: userLocation || null, // Allow null if not available
+          category: selectedCategory.name,
+        };
+
+        // Store search results and params for the results page
+        sessionStorage.setItem(
+          'searchParams',
+          JSON.stringify(searchParamsForResults)
+        );
+        sessionStorage.setItem('searchResults', JSON.stringify(searchResults));
+
+        // Navigate to search results page
+        navigate('/search-results', {
+          state: { searchParams: searchParamsForResults, searchResults },
+        });
+      } catch (error) {
+        console.error('Category search failed:', error);
+
+        // Handle different types of errors
+        if (error.message.includes('401')) {
+          alert('Please log in to search for shops.');
+        } else if (error.message.includes('403')) {
+          alert('You do not have permission to search shops.');
+        } else if (error.message.includes('500')) {
+          alert('Server error. Please try again later.');
+        } else {
+          alert('Search failed. Please check your connection and try again.');
+        }
+      } finally {
+        setIsSearching(false);
+      }
+    }
   };
 
-  const handleSearch = () => {
-    console.log('Search Query:', searchQuery);
-    console.log('Selected Location:', selectedLocation);
-    // Add your search logic here
+  // Transform backend API response to frontend format
+  const transformShopData = (apiResponse) => {
+    if (!apiResponse || !apiResponse.data || !Array.isArray(apiResponse.data)) {
+      return [];
+    }
+
+    return apiResponse.data.map((shop) => ({
+      id: shop.id,
+      name: shop.name || 'Unknown Shop',
+      category: shop.category || 'general',
+      address: shop.location?.address || 'Address not available',
+      phone: shop.contact?.phone || 'Phone not available',
+      email: shop.contact?.email || 'Email not available',
+      rating: shop.rating?.average || 4.0,
+      image:
+        shop.images?.featured ||
+        'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=300&h=200&fit=crop',
+      position: [
+        shop.location?.coordinates?.latitude || 9.9312,
+        shop.location?.coordinates?.longitude || 76.2673,
+      ],
+      discount: `${shop.discount?.percentage || 10}%`,
+      description: shop.description || 'No description available',
+      timing: shop.openingHours
+        ? formatOpeningHours(shop.openingHours)
+        : '9:00 AM - 9:00 PM',
+      distance: shop.location?.distance || 'Distance not available',
+      website: shop.contact?.website || '',
+      amenities: shop.amenities || [],
+      tags: shop.tags || [],
+      isOpen: shop.isOpen || false,
+      badges: shop.badges || [],
+    }));
   };
 
-  const handleActivateClick = () => {
-    setIsOTPModalOpen(true);
+  // Helper function to format opening hours
+  const formatOpeningHours = (openingHours) => {
+    if (typeof openingHours === 'string') {
+      return openingHours;
+    }
+    if (typeof openingHours === 'object' && openingHours.monday) {
+      return `${openingHours.monday} (Mon-Sun may vary)`;
+    }
+    return '9:00 AM - 9:00 PM';
+  };
+
+  const handleSearch = async () => {
+    // Determine the search location
+    let searchLocation = selectedLocation;
+
+    // If no location is selected, use current location
+    if (!selectedLocation && userLocation) {
+      searchLocation = locationName || 'Current Location';
+    }
+
+    // Validate search input
+    if (!searchQuery.trim()) {
+      alert('Please enter a search query');
+      return;
+    }
+
+    if (!searchLocation) {
+      alert('Please select a location or allow location access');
+      return;
+    }
+
+    setIsSearching(true);
+
+    try {
+      // Prepare search parameters for the backend API
+      const searchParams = {
+        search: searchQuery.trim(),
+        location: searchLocation,
+        category: undefined,
+        latitude: userLocation?.lat,
+        longitude: userLocation?.lng,
+        maxDistance: 10, // Search within 10km
+        sortBy: 'distance',
+        sortOrder: 'ASC',
+        page: 1,
+        limit: 50,
+      };
+
+      console.log('Search Parameters:', searchParams);
+
+      // Make API call using the usersAPI service
+      const apiResponse = await usersAPI.searchShops(searchParams);
+
+      console.log('API Response:', apiResponse);
+
+      // Transform the response data
+      const transformedShops = transformShopData(apiResponse);
+
+      console.log('Transformed Shops:', transformedShops);
+
+      // Prepare data for the results page
+      const searchResults = {
+        shops: transformedShops,
+        pagination: apiResponse.pagination || {},
+        searchMetadata: apiResponse.searchMetadata || {},
+        totalResults:
+          apiResponse.pagination?.totalRecords || transformedShops.length,
+      };
+
+      const searchParamsForResults = {
+        query: searchQuery,
+        location: searchLocation,
+        coordinates: userLocation,
+        category: categories[activeCategory]?.name || 'All',
+      };
+
+      // Store search results and params for the results page
+      sessionStorage.setItem(
+        'searchParams',
+        JSON.stringify(searchParamsForResults)
+      );
+      sessionStorage.setItem('searchResults', JSON.stringify(searchResults));
+
+      navigate('/search-results', {
+        state: { searchParams: searchParamsForResults, searchResults },
+      });
+    } catch (error) {
+      console.error('Search failed:', error);
+
+      // Handle different types of errors
+      if (error.message.includes('401')) {
+        alert('Please log in to search for shops.');
+      } else if (error.message.includes('403')) {
+        alert('You do not have permission to search shops.');
+      } else if (error.message.includes('500')) {
+        alert('Server error. Please try again later.');
+      } else {
+        alert('Search failed. Please check your connection and try again.');
+      }
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // Handler for closing success modal
+  const handleCloseSuccessModal = () => {
+    setIsSuccessModalOpen(false);
+    // Close the manage cards modal as well since activation is complete
+  };
+
+  // Handle activation - send Email OTP
+  const handleActivateClick = async () => {
+    if (!userData.email) {
+      alert('Email not found. Please update your profile.');
+      return;
+    }
+
+    setIsActivating(true);
+
+    try {
+      // Call API to send Email OTP
+      const response = await usersAPI.sendEmailOTP({
+        phone: userData.phone,
+        email: userData.email,
+        type: 'card_activation',
+        name: userData.fullName,
+      });
+      console.log({ response });
+      if (response.success) {
+        setOtpSessionId(response.data?.sessionId);
+        setIsOTPModalOpen(true);
+        console.log('Email OTP sent successfully to:', userData.email);
+      } else {
+        alert(response.message || 'Failed to send OTP. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error sending SMS OTP:', error);
+
+      // Handle different types of errors
+      if (error.message.includes('401')) {
+        alert('Please log in to activate your card.');
+      } else if (error.message.includes('403')) {
+        alert('You do not have permission to activate card.');
+      } else if (error.message.includes('429')) {
+        alert('Too many OTP requests. Please try again later.');
+      } else {
+        alert(
+          'Failed to send OTP. Please check your connection and try again.'
+        );
+      }
+    } finally {
+      setIsActivating(false);
+    }
   };
 
   const handleCloseOTPModal = () => {
     setIsOTPModalOpen(false);
+    setOtpSessionId(null);
+  };
+
+  const handleOTPVerify = async (otpCode) => {
+    try {
+      const response = await usersAPI.verifyEmailOTP({
+        otp: otpCode,
+        sessionId: otpSessionId,
+        email: userData.email,
+      });
+
+      if (response.success) {
+        // Close OTP modal and open success modal
+        setIsOTPModalOpen(false);
+        setOtpSessionId(null);
+        setIsSuccessModalOpen(true);
+
+        console.log('Card activation successful:', response);
+      } else {
+        throw new Error(response.message || 'Invalid OTP');
+      }
+    } catch (error) {
+      console.error('OTP verification failed:', error);
+      throw error; // Re-throw to handle in modal
+    }
+  };
+
+  // SMS OTP resend handler
+  const handleOTPResend = async () => {
+    try {
+      const response = await usersAPI.resendEmailOTP({
+        email: userData.email,
+        sessionId: otpSessionId,
+      });
+
+      if (response.success) {
+        setOtpSessionId(response.sessionId); // Update session ID if needed
+        console.log('Email OTP resent successfully to:', userData.email);
+        return true;
+      } else {
+        throw new Error(response.message || 'Failed to resend OTP');
+      }
+    } catch (error) {
+      console.error('Error resending SMS OTP:', error);
+      throw error; // Re-throw to handle in modal
+    }
   };
 
   const locations = [
@@ -89,6 +554,8 @@ const SearchPage = () => {
     'Kolkata, West Bengal',
     'Pune, Maharashtra',
     'Ahmedabad, Gujarat',
+    'Kochi, Kerala',
+    'Thiruvananthapuram, Kerala',
   ];
 
   const howItWorksSteps = [
@@ -100,9 +567,9 @@ const SearchPage = () => {
     },
     {
       step: 2,
-      title: 'Email Verification with OTP',
+      title: 'SMS Verification with OTP',
       description:
-        "Once you apply, you'll receive an email with a One-Time Password (OTP). Enter this OTP on the website to verify your identity and confirm your interest in the selected discount offer.",
+        "Once you apply, you'll receive an SMS with a One-Time Password (OTP). Enter this OTP on the website to verify your identity and confirm your interest in the selected discount offer.",
     },
     {
       step: 3,
@@ -148,12 +615,12 @@ const SearchPage = () => {
     {
       question: 'How do I get a discount card?',
       answer:
-        'Simply fill out our application form with your details and preferred category, verify your email with the OTP we send, and your digital card will be issued immediately.',
+        'Simply fill out our application form with your details and preferred category, verify your phone number with the OTP we send, and your digital card will be issued immediately.',
     },
     {
       question: 'Why do I need to enter an OTP?',
       answer:
-        'OTP verification ensures the security of your account and confirms that you have access to the email address provided during registration.',
+        'OTP verification ensures the security of your account and confirms that you have access to the phone number provided during registration.',
     },
     {
       question: 'How long is the card valid after activation?',
@@ -176,21 +643,18 @@ const SearchPage = () => {
         <section className="bg-[#7AC3FB] py-24 px-6 relative overflow-hidden rounded-3xl">
           {/* Background decorative elements */}
           <div className="absolute inset-0 bg-gradient-to-r from-blue-400/30 to-cyan-400/20"></div>
-
           <div className="max-w-7xl mx-auto text-center relative z-10">
             <h1 className="font-figtree text-4xl md:text-5xl font-bold mb-6 text-[#3D3C96]">
               Unlock Amazing Discounts with
               <br />
               Our Pravasi Previlage Card.
             </h1>
-
             {/* Subtitle */}
             <p className="text-[#222158] opacity-67 text-xl font-semibold mb-14 font-figtree">
               Find stores near you and enjoy exclusive discounts on shopping,
               <br />
               dining, wellness, and more.
             </p>
-
             {/* Search Form */}
             <div className="max-w-4xl mx-auto mb-16">
               <div className="bg-white rounded-2xl p-3 flex flex-col md:flex-row gap-3">
@@ -203,6 +667,7 @@ const SearchPage = () => {
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="w-full px-4 py-2 border-0 rounded-xl placeholder-[#868686] placeholder-font-semibold 
              placeholder-text-sm"
+                    disabled={isSearching}
                   />
                   <CategoryIcon
                     className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400"
@@ -210,7 +675,6 @@ const SearchPage = () => {
                     height={20}
                   />
                 </div>
-
                 {/* Location Dropdown */}
                 <div className="relative min-w-[250px] border border-[#C7C7C7] rounded-2xl p-2">
                   <MapPin
@@ -222,6 +686,7 @@ const SearchPage = () => {
                     onChange={(e) => setSelectedLocation(e.target.value)}
                     className={`w-full pl-12 pr-4 py-3 border-0 rounded-xl cursor-pointer
               ${selectedLocation === '' ? 'text-[#868686] font-semibold text-sm' : 'text-black'}`}
+                    disabled={isSearching}
                   >
                     <option value="" disabled>
                       Search Location...
@@ -233,18 +698,21 @@ const SearchPage = () => {
                     ))}
                   </select>
                 </div>
-
                 {/* Search Button */}
                 <button
                   onClick={handleSearch}
-                  className="bg-[#AFDCFF] text-[#222158] px-8 py-4 rounded-2xl text-sm font-semibold transition-colors duration-200 flex items-center justify-center gap-2 min-w-[140px]"
+                  disabled={isSearching}
+                  className="bg-[#AFDCFF] text-[#222158] px-8 py-4 rounded-2xl text-sm font-semibold transition-colors duration-200 flex items-center justify-center gap-2 min-w-[140px] hover:bg-[#9DD0FF] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <Search size={20} />
-                  Search Now
+                  {isSearching ? (
+                    <Loader2 size={20} className="animate-spin" />
+                  ) : (
+                    <Search size={20} />
+                  )}
+                  {isSearching ? 'Searching...' : 'Search Now'}
                 </button>
               </div>
             </div>
-
             {/* CTA Section - matching the UI layout */}
             <div className="mx-4 md:mx-8 lg:mx-12 font-figtree">
               <div className="flex flex-col md:flex-row items-center justify-between mt-16">
@@ -258,7 +726,6 @@ const SearchPage = () => {
                     big!
                   </p>
                 </div>
-
                 {/* Center button */}
                 <div className="flex-shrink-0 mx-8">
                   <div
@@ -269,20 +736,29 @@ const SearchPage = () => {
                     }}
                   >
                     <button
-                      className="bg-sky-300 hover:bg-sky-200 font-semibold px-12 py-4 rounded-full shadow-lg flex items-center space-x-2 transition-colors duration-200"
+                      className="bg-sky-300 hover:bg-sky-200 font-semibold px-12 py-4 rounded-full shadow-lg flex items-center space-x-2 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                       onClick={handleActivateClick}
+                      disabled={isActivating}
                     >
-                      <span className="text-[#222158] font-semibold text-xl">
-                        ACTIVATE
-                      </span>
-                      <ArrowUpRight
-                        size={20}
-                        className="text-[#222158] font-semibold text-xl"
-                      />
+                      {isActivating ? (
+                        <Loader2
+                          size={20}
+                          className="animate-spin text-[#222158]"
+                        />
+                      ) : (
+                        <>
+                          <span className="text-[#222158] font-semibold text-xl">
+                            ACTIVATE
+                          </span>
+                          <ArrowUpRight
+                            size={20}
+                            className="text-[#222158] font-semibold text-xl"
+                          />
+                        </>
+                      )}
                     </button>
                   </div>
                 </div>
-
                 {/* Right text */}
                 <div className="text-right flex-1">
                   <div className="text-[#222158] font-semibold text-xl">
@@ -315,7 +791,6 @@ const SearchPage = () => {
                 to unlock exclusive in-store benefits.
               </p>
             </div>
-
             {/* Enhanced Navigation buttons */}
             <div className="flex items-center space-x-4">
               <button
@@ -333,13 +808,14 @@ const SearchPage = () => {
                 <ArrowRight size={20} />
               </button>
             </div>
-          </div>{' '}
-          {/* Categories Grid - IMPORTANT: Use currentCategories, not categories */}
+          </div>
+          {/* Categories Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {currentCategories.map((category, index) => (
               <div
                 key={`page-${currentPage}-${category.name}-${index}`}
                 className="transform transition-all duration-300 ease-out"
+                onClick={() => handleCategoryClick(index)}
               >
                 <CategoryCard
                   category={category}
@@ -352,7 +828,7 @@ const SearchPage = () => {
         </div>
       </section>
       {/* How It Works Section */}
-      <section className="py-16 px-6 ml-4  font-figtree">
+      <section className="py-16 px-6 ml-4 font-figtree" id="how-it-works">
         <div className="max-w-7xl mx-auto text-center">
           <h2
             className="text-3xl md:text-4xl font-bold mb-16 text-transparent bg-clip-text"
@@ -407,7 +883,6 @@ const SearchPage = () => {
             >
               Why Choose Pravasi Privilege Card?
             </h2>
-
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               {features.map((feature, index) => (
                 <FeatureCard
@@ -423,7 +898,7 @@ const SearchPage = () => {
         </section>
       </div>
       {/* FAQ Section */}
-      <div className="px-6 ml-4 mt-24 py-8">
+      <div className="px-6 ml-4 mt-24 py-8" id="faq">
         <section className="py-16 px-6 bg-white font-figtree">
           <div className="max-w-7xl mx-auto">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -453,7 +928,23 @@ const SearchPage = () => {
         </section>
       </div>
 
-      <OTPModal isOpen={isOTPModalOpen} onClose={handleCloseOTPModal} />
+      {/* OTP Modal */}
+      <OTPModal
+        isOpen={isOTPModalOpen}
+        onClose={handleCloseOTPModal}
+        onVerify={handleOTPVerify}
+        onResend={handleOTPResend}
+        userPhone={userData.phone}
+        userName={userData.name}
+      />
+      {isSuccessModalOpen && (
+        <DiscountCard
+          isOpen={isSuccessModalOpen}
+          onClose={handleCloseSuccessModal}
+          title="Card Activated Successfully!"
+          message="Your privilege card has been activated and is ready to use."
+        />
+      )}
     </div>
   );
 };

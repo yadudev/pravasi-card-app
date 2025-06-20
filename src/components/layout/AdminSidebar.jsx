@@ -12,6 +12,8 @@ import {
   Menu,
   X,
   Shield,
+  Phone,
+  PhoneIcon,
 } from 'lucide-react';
 
 const Sidebar = ({ isOpen, onToggle, activeTab, onTabChange }) => {
@@ -20,11 +22,8 @@ const Sidebar = ({ isOpen, onToggle, activeTab, onTabChange }) => {
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
     { id: 'users', label: 'Users Management', icon: Users },
     { id: 'shops', label: 'Shops Management', icon: Store },
-    { id: 'discounts', label: 'Discounts & Rules', icon: Percent },
-    { id: 'content', label: 'Content Management', icon: FileText },
-    { id: 'reports', label: 'Reports & Analytics', icon: TrendingUp },
-    { id: 'settings', label: 'Settings', icon: Settings },
-  ];
+    { id: 'otp', label: 'OTP Management', icon: PhoneIcon },
+    ];
 
   const handleLogout = () => {
     if (window.confirm('Are you sure you want to logout?')) {

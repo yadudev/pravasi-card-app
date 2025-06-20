@@ -13,7 +13,7 @@ module.exports = (sequelize, DataTypes) => {
       },
       ownerName: {
         type: DataTypes.STRING(100),
-        allowNull: false,
+        allowNull: true,
       },
       email: {
         type: DataTypes.STRING(255),
@@ -35,6 +35,22 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING(255),
         allowNull: true,
       },
+      latitude: {
+        type: DataTypes.DECIMAL(24, 15),
+        allowNull: true,
+        validate: {
+          min: -90,
+          max: 90,
+        },
+      },
+      longitude: {
+        type: DataTypes.DECIMAL(24, 15),
+        allowNull: true,
+        validate: {
+          min: -180,
+          max: 180,
+        },
+      },
       category: {
         type: DataTypes.STRING(50),
         allowNull: true,
@@ -42,6 +58,11 @@ module.exports = (sequelize, DataTypes) => {
       description: {
         type: DataTypes.TEXT,
         allowNull: true,
+      },
+      tags: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        comment: 'Comma-separated tags for search optimization',
       },
       discountOffered: {
         type: DataTypes.DECIMAL(5, 2),
@@ -51,6 +72,37 @@ module.exports = (sequelize, DataTypes) => {
           min: 0,
           max: 100,
         },
+      },
+      website: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        validate: {
+          isUrl: true,
+        },
+      },
+      averageRating: {
+        type: DataTypes.DECIMAL(3, 2),
+        allowNull: true,
+        defaultValue: 0,
+        validate: {
+          min: 0,
+          max: 5,
+        },
+      },
+      featuredImage: {
+        type: DataTypes.STRING(500),
+        allowNull: true,
+        comment: 'URL of the main shop image',
+      },
+      amenities: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        comment: 'JSON array of amenities (WiFi, Parking, AC, etc.)',
+      },
+      openingHours: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        comment: 'JSON object with daily opening hours',
       },
       status: {
         type: DataTypes.ENUM('pending', 'approved', 'rejected', 'blocked'),
@@ -140,8 +192,54 @@ module.exports = (sequelize, DataTypes) => {
     {
       tableName: 'shops',
       timestamps: true,
+      indexes: [
+        // Add indexes for better search performance
+        {
+          fields: ['latitude', 'longitude'],
+          name: 'idx_shops_coordinates',
+        },
+        {
+          fields: ['category'],
+          name: 'idx_shops_category',
+        },
+        {
+          fields: ['status', 'isActive'],
+          name: 'idx_shops_status',
+        },
+        {
+          fields: ['averageRating'],
+          name: 'idx_shops_rating',
+        },
+        // Full-text search index for better text search
+        {
+          fields: ['name', 'description', 'tags'],
+          name: 'idx_shops_search',
+          type: 'FULLTEXT', // MySQL/MariaDB only
+        },
+      ],
     }
   );
+
+  // Add virtual fields for computed properties
+  Shop.prototype.getDiscountPercentage = function () {
+    return this.discountOffered; // Alias for consistency with API
+  };
+
+  Shop.prototype.getAmenitiesList = function () {
+    try {
+      return this.amenities ? JSON.parse(this.amenities) : [];
+    } catch (e) {
+      return [];
+    }
+  };
+
+  Shop.prototype.getOpeningHoursData = function () {
+    try {
+      return this.openingHours ? JSON.parse(this.openingHours) : {};
+    } catch (e) {
+      return {};
+    }
+  };
 
   Shop.associate = (models) => {
     Shop.hasMany(models.DiscountCard, { foreignKey: 'shopId', as: 'cards' });

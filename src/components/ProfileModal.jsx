@@ -1,20 +1,24 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, ChevronRight, Trash2, ArrowRight } from 'lucide-react';
 
-const ProfileModal = ({
-  isOpen,
-  onClose,
-  user,
-  onLogout,
-  onManageCard,
-  getUserInitials,
-}) => {
+const ProfileModal = ({ isOpen, onClose, user, getUserInitials }) => {
   const [formData, setFormData] = useState({
-    fullName: user?.name || '',
-    phoneNumber: user?.phone || '+91 832487778',
-    email: user?.email || '',
-    location: user?.location || 'Kochi',
+    fullName: '',
+    phoneNumber: '',
+    email: '',
+    location: '',
   });
+
+  useEffect(() => {
+    if (user) {
+      setFormData({
+        fullName: user.fullName || '',
+        phoneNumber: user.phone || '',
+        email: user.email || '',
+        location: user.location || '',
+      });
+    }
+  }, [user]);
 
   if (!isOpen) return null;
 
@@ -157,7 +161,9 @@ const ProfileModal = ({
             onClick={handleChangePassword}
             className="w-full flex items-center justify-between px-4 py-3 border border-[#CCCCCC] rounded-lg hover:bg-gray-50 transition-colors group"
           >
-            <span className="text-black text-base font-semibold">Change Password</span>
+            <span className="text-black text-base font-semibold">
+              Change Password
+            </span>
             <ArrowRight
               size={20}
               className="text-black text-base font-semibold"

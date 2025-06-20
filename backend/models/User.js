@@ -22,11 +22,6 @@ module.exports = (sequelize, DataTypes) => {
         unique: true,
         validate: { is: /^[0-9+\-() ]{7,15}$/i },
       },
-      password: {
-        type: DataTypes.STRING(255),
-        allowNull: false,
-        validate: { len: [8, 255] },
-      },
       avatar: { type: DataTypes.STRING(255) },
       dateOfBirth: { type: DataTypes.DATEONLY },
       gender: { type: DataTypes.ENUM('male', 'female', 'other') },
@@ -51,13 +46,6 @@ module.exports = (sequelize, DataTypes) => {
     {
       tableName: 'users',
       timestamps: true,
-      hooks: {
-        beforeSave: async (user) => {
-          if (user.changed('password') && !user.password.startsWith('$2b$')) {
-            user.password = await bcrypt.hash(user.password, 12);
-          }
-        },
-      },
     }
   );
 
@@ -72,10 +60,6 @@ module.exports = (sequelize, DataTypes) => {
     });
     User.belongsTo(models.User, { foreignKey: 'referredBy', as: 'referrer' });
     User.hasMany(models.User, { foreignKey: 'referredBy', as: 'referrals' });
-  };
-
-  User.prototype.validatePassword = async function (password) {
-    return bcrypt.compare(password, this.password);
   };
 
   User.prototype.toJSON = function () {

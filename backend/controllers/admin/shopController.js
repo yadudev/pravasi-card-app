@@ -10,29 +10,51 @@ class ShopController {
   static async registerShop(req, res) {
     try {
       const {
-        name,
-        ownerName,
+        shopName,
+        category,
         email,
         phone,
-        address,
-        city,
-        state,
-        pincode,
-        shopType,
+        district,
+        talukBlock,
+        location,
+        storeAddress,
         gstNumber,
-        panNumber,
-        description,
-        operatingHours,
-        website,
-        socialMedia,
+        discountOffer,
+        confirmDetails,
       } = req.body;
 
       // Validate required fields
-      if (!name || !ownerName || !email || !phone || !address) {
+      if (
+        !shopName ||
+        !category ||
+        !email ||
+        !phone ||
+        !district ||
+        !talukBlock ||
+        !location ||
+        !storeAddress ||
+        !gstNumber
+      ) {
         return res.status(400).json({
           success: false,
-          message:
-            'Shop name, owner name, email, phone, and address are required',
+          message: 'All required fields must be filled',
+        });
+      }
+
+      // Validate email format
+      const emailRegex = /\S+@\S+\.\S+/;
+      if (!emailRegex.test(email)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Please provide a valid email address',
+        });
+      }
+
+      // Validate confirmation checkbox
+      if (!confirmDetails) {
+        return res.status(400).json({
+          success: false,
+          message: 'You must confirm the details to proceed',
         });
       }
 
@@ -47,53 +69,30 @@ class ShopController {
 
       // Create shop with pending status
       const shopData = {
-        name: name.trim(),
-        ownerName: ownerName.trim(),
+        name: shopName.trim(),
+        shopType: category,
         email: email.toLowerCase().trim(),
         phone: phone.trim(),
-        address: address.trim(),
-        city: city?.trim(),
-        state: state?.trim(),
-        pincode: pincode?.trim(),
-        shopType: shopType || 'General',
-        gstNumber: gstNumber?.trim(),
-        panNumber: panNumber?.trim(),
-        description: description?.trim(),
-        operatingHours: operatingHours,
-        website: website?.trim(),
-        socialMedia: socialMedia,
+        address: storeAddress.trim(),
+        city: location.trim(),
+        state: district,
+        talukBlock: talukBlock,
+        gstNumber: gstNumber.trim(),
+        discountOffer: discountOffer?.trim() || null,
         status: 'pending', // All public registrations start as pending
         isActive: false, // Will be activated when approved
-        totalRevenue: 0,
-        totalTransactions: 0,
       };
 
       const shop = await Shop.create(shopData);
 
-      // Send registration confirmation email
-      if (shop.email) {
-        try {
-          await EmailService.sendShopRegistrationConfirmation(
-            shop.email,
-            shop.shopName
-          );
-        } catch (emailError) {
-          logger.error(
-            'Error sending registration confirmation email:',
-            emailError
-          );
-        }
-      }
-
       res.status(201).json({
         success: true,
         message:
-          'Shop registration submitted successfully! Your application is under review.',
+          'Shop registration submitted successfully! We will review your application and get back to you within 2-3 business days.',
         data: {
           id: shop.id,
-          shopName: shop.shopName,
+          shopName: shop.name,
           status: shop.status,
-          registrationDate: shop.createdAt,
         },
       });
     } catch (error) {
@@ -111,6 +110,14 @@ class ShopController {
         });
       }
 
+      // Handle unique constraint violations
+      if (error.name === 'SequelizeUniqueConstraintError') {
+        return res.status(400).json({
+          success: false,
+          message: 'A shop with this information already exists',
+        });
+      }
+
       res.status(500).json({
         success: false,
         message: 'Failed to register shop. Please try again.',
@@ -125,7 +132,7 @@ class ShopController {
    */
   static async createShopByAdmin(req, res) {
     try {
-      const adminId = req.user?.id; 
+      const adminId = req.user?.id;
       if (!adminId) {
         return res
           .status(401)
@@ -524,7 +531,11 @@ class ShopController {
         });
       }
 
-      if (shop.status !== 'pending' && shop.status !== 'rejected' && shop.status !== null) {
+      if (
+        shop.status !== 'pending' &&
+        shop.status !== 'rejected' &&
+        shop.status !== null
+      ) {
         return res.status(400).json({
           success: false,
           message: 'Only pending shops can be approved',
