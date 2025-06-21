@@ -125,10 +125,6 @@ const Header = ({ onNavigate }) => {
     onNavigate('home');
   };
 
-  const handleShopRegistrationClick = () => {
-    onNavigate('shop-registration');
-  };
-
   const handleLogout = async () => {
     try {
       await logout();
@@ -352,7 +348,7 @@ const Header = ({ onNavigate }) => {
                     item.active
                       ? 'text-[#3D3C96] border-b-2 border-[#3D3C96] pb-1'
                       : 'text-black hover:text-[#3D3C96]'
-                  } font-semibold transition-colors duration-200 font-figtree cursor-pointer`}
+                  } font-semibold transition-colors duration-200 font-figtree cursor-pointer text-nowrap`}
                 >
                   {item.name}
                 </a>
@@ -542,13 +538,6 @@ const Header = ({ onNavigate }) => {
                   </a>
                 ))}
                 <div className="pt-4 border-t">
-                  <button
-                    onClick={handleShopRegistrationClick}
-                    className="w-[159px] h-[35px] border-[#D5D5D5] border px-4 py-2 rounded-full transition-colors font-figtree text-sm font-medium mb-4"
-                  >
-                    Shop Registration
-                  </button>
-
                   <div className="flex items-center space-x-4">
                     <span className="text-gray-600">Help</span>
                     <span className="text-black">|</span>

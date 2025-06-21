@@ -47,7 +47,7 @@ const LoyaltyCard = ({
 
         {/* Card Number */}
         <div className="text-center mb-3">
-          <div className="text-4xl font-graduate text-[#222158] font-medium tracking-wider">
+          <div className="text-[28px] font-graduate text-[#222158] font-normal tracking-wider">
             {cardNumber}
           </div>
         </div>

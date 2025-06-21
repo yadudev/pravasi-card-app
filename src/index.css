@@ -2,9 +2,16 @@
 
 @layer base {
   body {
-    font-family: 'Figtree','Graduate', sans-serif;
+    font-family: 'Figtree', sans-serif;
     margin: 0;
     padding: 0;
+  }
+   .font-graduate {
+    font-family: 'Graduate', serif;
+  }
+  
+  .font-figtree {
+    font-family: 'Figtree', sans-serif;
   }
 }
 
