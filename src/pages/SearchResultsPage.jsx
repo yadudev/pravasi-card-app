@@ -770,50 +770,57 @@ const SearchResultsPage = ({ onShopClick }) => {
                   }}
                 >
                   <Popup>
-                    <div className="p-3 min-w-[250px]">
-                      <div className="relative mb-3">
+                    <div className="p-3 w-[300px] rounded-xl shadow-lg">
+                      {/* Image Section */}
+                      <div className="relative">
                         <img
                           src={shop.image}
                           alt={shop.name}
-                          className="w-full h-32 object-cover rounded-lg"
+                          className="w-full h-36 object-cover rounded-lg"
                           onError={(e) => {
                             e.target.src =
                               'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=300&h=200&fit=crop';
                           }}
                         />
-                        <div className="absolute top-2 right-2 bg-[#6FC141] text-white px-2 py-1 rounded-full text-sm font-semibold">
+                        <div className="absolute top-2 left-2 bg-[#6FC141] text-white px-2 py-1 rounded-md text-xs font-semibold">
                           {shop.discount}
                         </div>
                       </div>
-                      <div className="flex items-center justify-between mb-2">
-                        <h4 className="font-semibold text-lg">{shop.name}</h4>
-                        {/* <div className="flex items-center">
-                          <Star
-                            className="text-yellow-400 fill-current mr-1"
+
+                      {/* Content Section */}
+                      <div className="mt-3 space-y-1">
+                        <p className="text-sm text-gray-500 flex items-center">
+                          <MapPin
                             size={16}
+                            className="text-[#A6A6A6] flex-shrink-0 mr-2"
                           />
-                          <span className="text-sm font-medium">
-                            {shop.rating}
-                          </span>
-                        </div> */}
-                      </div>
-                      <p className="text-sm text-gray-600 mb-2">
-                        {shop.address}
-                      </p>
-                      <p className="text-sm text-gray-700 mb-3">
-                        {shop.description}
-                      </p>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleMarkerClick(shop)}
-                          className="flex-1 bg-blue-600 text-white py-2 px-3 rounded-lg font-medium text-sm hover:bg-blue-700 transition-colors"
-                        >
-                          View Details
-                        </button>
-                        <button className="flex-1 border border-gray-300 py-2 px-3 rounded-lg font-medium text-sm hover:bg-gray-50 transition-colors flex items-center justify-center">
-                          <ExternalLink size={14} className="mr-1" />
-                          Directions
-                        </button>
+                          {shop.address} &nbsp;•&nbsp;{' '}
+                          {shop.distance ?? '1.0 km'}
+                        </p>
+
+                        <h4 className="font-semibold text-lg text-black">
+                          {shop.name}
+                        </h4>
+                        <div className="flex justify-between gap-1 mt-6 flex-wrap md:flex-nowrap">
+                          {/* Call Section */}
+                          <div className="flex-1 text-[#A6A6A6] min-w-[120px]">
+                            <span className="block text-xs font-medium text-[#A6A6A6] mb-1">
+                              Call on
+                            </span>
+                            <div className="flex items-center text-sm font-medium text-black">
+                              <span>{shop.phone}</span>
+                            </div>
+                          </div>
+                          {/* Email Section */}
+                          <div className="flex-1 text-[#A6A6A6] min-w-[350px] ml-6">
+                            <span className="block text-xs font-medium text-[#A6A6A6] mb-1">
+                              Email ID
+                            </span>
+                            <div className="flex items-center text-sm font-medium text-black break-all">
+                              <span>{shop.email}</span>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </Popup>
@@ -836,43 +843,70 @@ const SearchResultsPage = ({ onShopClick }) => {
                     const categoryInfo = getCategoryInfo(shop.category);
                     return (
                       <>
-                        <div className="relative mb-3">
-                          <img
-                            src={shop.image}
-                            alt={shop.name}
-                            className="w-full h-32 object-cover rounded-lg"
-                            onError={(e) => {
-                              e.target.src =
-                                'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=300&h=200&fit=crop';
-                            }}
-                          />
-                          <div className="absolute top-2 right-2 bg-[#6FC141] text-white px-2 py-1 rounded-full text-xs font-semibold">
-                            {shop.discount}
-                          </div>
-                        </div>
-                        <h4 className="font-semibold text-lg mb-1">
-                          {shop.name}
-                        </h4>
-                        <p className="text-sm text-gray-600 mb-2">
-                          {shop.address}
-                        </p>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center">
-                            <Star
-                              className="text-yellow-400 fill-current mr-1"
-                              size={14}
+                        <div className="flex">
+                          {/* Image Section */}
+                          <div className="relative flex-shrink-0 w-30">
+                            <img
+                              src={shop.image}
+                              alt={shop.name}
+                              className="w-full h-full object-cover rounded-l-2xl"
+                              onError={(e) => {
+                                e.target.src =
+                                  'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=300&h=200&fit=crop';
+                              }}
                             />
-                            <span className="text-sm font-medium">
-                              {shop.rating}
-                            </span>
+                            {/* Discount Badge */}
+                            <div className="absolute top-2 left-2 bg-[#6FC141] text-white px-2 py-1 rounded-md text-xs font-semibold flex items-center">
+                              <span>{shop.discount}</span>
+                            </div>
                           </div>
-                          <button
-                            onClick={() => handleMarkerClick(shop)}
-                            style={{ pointerEvents: 'auto' }}
-                            className="bg-blue-600 text-white px-3 py-1 rounded text-sm font-medium hover:bg-blue-700 transition-colors"
-                          >
-                            View Details
-                          </button>
+                          {/* Content Section */}
+                          <div className="px-4">
+                            {/* Header with Location Icon */}
+                            <div className="flex items-start gap-2 mb-2">
+                              <div className="flex">
+                                <MapPin
+                                  size={16}
+                                  className="text-[#A6A6A6] mt-0.5 flex-shrink-0"
+                                />
+                                <div className="text-sm font-medium text-[A6A6A6] ml-1">
+                                  {shop.address} • {shop.distance}
+                                </div>
+                              </div>
+                            </div>
+                            <div>
+                              <h3 className="font-bold text-xl text-black leading-tight">
+                                {shop.name}
+                              </h3>
+                            </div>
+                            {/* ✅ RESTORED: Rating section */}
+                            {/* <div className="flex items-center mt-2 mb-2">
+                          <Star
+                            className="text-yellow-400 fill-current mr-1"
+                            size={14}
+                          />
+                          <span className="text-sm font-medium text-gray-600">
+                            {shop.rating}
+                          </span>
+                          {shop.isOpen && (
+                            <span className="ml-2 text-xs bg-green-100 text-green-600 px-2 py-1 rounded">
+                              Open Now
+                            </span>
+                          )}
+                        </div> */}
+                            {/* Contact Details */}
+                            <div className="flex justify-between gap-1 mt-6 flex-wrap md:flex-nowrap">
+                              {/* Call Section */}
+                              <div className="flex-1 text-[#A6A6A6] min-w-[120px]">
+                                <span className="block text-xs font-medium text-[#A6A6A6] mb-1">
+                                  Call on
+                                </span>
+                                <div className="flex items-center text-sm font-medium text-black">
+                                  <span>{shop.phone}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       </>
                     );
