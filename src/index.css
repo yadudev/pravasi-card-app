@@ -6,12 +6,12 @@
     margin: 0;
     padding: 0;
   }
-   .font-graduate {
-    font-family: 'Graduate', serif;
-  }
-  
-  .font-figtree {
-    font-family: 'Figtree', sans-serif;
-  }
 }
 
+.font-graduate {
+  font-family: 'Graduate', serif !important;
+}
+
+.font-figtree {
+  font-family: 'Figtree', sans-serif !important;
+}
