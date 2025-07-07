@@ -33,25 +33,21 @@ const LoyaltyCard = ({
           <div>
             <img src={pravasiLogo} alt="Pravasi Logo" className="h-15 w-auto" />
           </div>
-
           {/* Right: Title */}
           <div className="text-base font-semibold mr-4 text-gray-700 text-right pt-5">
             PRAVASI PRIVILEGE CARD
           </div>
         </div>
-
         {/* Chip icon */}
         <div className="mb-4 ml-6">
           <PrivilegeCardSVG />
         </div>
-
         {/* Card Number */}
         <div className="text-center mb-3">
           <div className="text-[28px] font-graduate text-[#222158] font-normal tracking-wider">
             {cardNumber}
           </div>
         </div>
-
         {/* Cardholder details */}
         <div className="flex justify-between items-center ml-6">
           <div className="flex gap-4">
@@ -64,12 +60,10 @@ const LoyaltyCard = ({
           </div>
         </div>
       </div>
-
       {/* Purple middle section with website */}
       <div className="bg-[#3D3C96] text-white text-center py-3 font-medium text-base">
         {website}
       </div>
-
       {/* White bottom section */}
       <div className="bg-white h-6">{/* Empty white space at bottom */}</div>
     </div>

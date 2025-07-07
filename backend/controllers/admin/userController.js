@@ -476,27 +476,41 @@ class UserController {
   static async sendEmailOTP(req, res) {
     try {
       const { email, phone, type, fullName } = req.body;
-      const userId = req.user?.id || req.admin?.userId;
 
-      // Get user information
-      const user = await User.findByPk(userId, {
+      if (!email && !phone) {
+        return res
+          .status(400)
+          .json(ApiResponse.error('Email or phone is required', 400));
+      }
+
+      // Fetch user using email or phone
+      const user = await User.findOne({
+        where: {
+          [Op.or]: [email ? { email } : null, phone ? { phone } : null].filter(
+            Boolean
+          ),
+        },
         attributes: ['id', 'fullName', 'email', 'phone'],
       });
+
       if (!user) {
         return res.status(404).json(ApiResponse.error('User not found', 404));
       }
 
-      // Validate email belongs to user
-      if (user.email !== email) {
+      // Optional: validate that the input email matches the user's record
+      if (email && user.email !== email) {
         return res
           .status(400)
           .json(ApiResponse.error('Email does not match user account', 400));
       }
 
-      // ✅ Rate limiting check
+      const contactInfo = email || user.email;
+      const userId = user.id;
+
+      // ✅ Rate limiting check (1 min cooldown)
       const recentCount = await OTPSession.countRecentRequests(
         userId,
-        email,
+        contactInfo,
         1
       );
       if (recentCount > 0) {
@@ -507,8 +521,11 @@ class UserController {
           );
       }
 
-      // ✅ Daily limit check
-      const dailyCount = await OTPSession.countDailyRequests(userId, email);
+      // ✅ Daily limit check (10 per day)
+      const dailyCount = await OTPSession.countDailyRequests(
+        userId,
+        contactInfo
+      );
       if (dailyCount >= 10) {
         return res
           .status(429)
@@ -526,25 +543,25 @@ class UserController {
         userId,
         otpCode,
         otpType: 'email',
-        contactInfo: email,
+        contactInfo,
         purpose: type,
         ipAddress: req.ip,
         userAgent: req.get('User-Agent'),
       });
 
+      // Optional: Generate and send email content
       // const emailContent = UserController.generateEmailContent(
       //   otpCode,
       //   type,
       //   fullName || user.fullName
       // );
-
       // await EmailService.sendEmail(
-      //   email,
+      //   contactInfo,
       //   emailContent.subject,
       //   emailContent.html
       // );
 
-      logger.info(`Email OTP sent to ${email} for user ${userId}`);
+      logger.info(`Email OTP sent to ${contactInfo} for user ${userId}`);
 
       res.status(200).json(
         ApiResponse.success(
@@ -571,20 +588,40 @@ class UserController {
   static async verifyEmailOTP(req, res) {
     try {
       const { otp, sessionId, email } = req.body;
-      const userId = req.user?.id || req.admin?.userId;
 
-      // ✅ Validate OTP using model method
-      const session = await OTPSession.validateOTP(sessionId, otp, userId);
+      // Fetch session details by sessionId
+      const session = await OTPSession.findBySessionId(sessionId);
 
-      // Perform action based on purpose
+      if (!session) {
+        return res
+          .status(400)
+          .json(ApiResponse.error('Invalid OTP session', 400));
+      }
+
+      // Fetch the user using email or phone from the session
+      const user = await User.findOne({
+        where: {
+          [Op.or]: [{ email }],
+        },
+        attributes: ['id', 'email', 'phone'],
+      });
+
+      if (!user) {
+        return res.status(404).json(ApiResponse.error('User not found', 404));
+      }
+
+      // Validate OTP using model method
+      await OTPSession.validateOTP(sessionId, otp, user.id);
+
+      // Handle OTP verification success for the user
       await UserController.handleOTPVerificationSuccess(
         session.purpose,
-        userId,
-        email
+        user.id,
+        email || user.email // Fallback to user email if email is not provided
       );
 
       logger.info(
-        `OTP verified successfully for user ${userId}, purpose: ${session.purpose}`
+        `OTP verified successfully for user ${user.id}, purpose: ${session.purpose}`
       );
 
       res.status(200).json(
@@ -613,14 +650,26 @@ class UserController {
   static async resendEmailOTP(req, res) {
     try {
       const { email, sessionId } = req.body;
-      const userId = req.user?.id || req.admin?.userId;
 
+      // Fetch session details by sessionId
       const session = await OTPSession.findBySessionId(sessionId);
 
-      if (!session || session.userId !== userId) {
+      if (!session) {
         return res
           .status(400)
           .json(ApiResponse.error('Invalid OTP session', 400));
+      }
+
+      // Fetch the user using email or phone from the session
+      const user = await User.findOne({
+        where: {
+          [Op.or]: [{ email }],
+        },
+        attributes: ['id', 'email', 'phone'],
+      });
+
+      if (!user) {
+        return res.status(404).json(ApiResponse.error('User not found', 404));
       }
 
       if (session.isVerified) {
@@ -643,24 +692,19 @@ class UserController {
       const newOtpCode = UserController.generateOTP();
       const updatedSession = await session.updateForResend(newOtpCode);
 
-      // Get user info
-      const user = await User.findByPk(userId, {
-        attributes: ['id', 'fullName', 'email', 'phone'],
-      });
-
+      // Generate and send the OTP via email
       // const emailContent = UserController.generateEmailContent(
       //   newOtpCode,
       //   session.purpose,
-      //   user?.fullName
+      //   user.fullName
       // );
-
       // await EmailService.sendEmail(
       //   email,
       //   emailContent.subject,
       //   emailContent.html
       // );
 
-      logger.info(`Email OTP resent to ${email} for user ${userId}`);
+      logger.info(`Email OTP resent to ${email} for user ${user.id}`);
 
       res.status(200).json(
         ApiResponse.success(
@@ -2285,116 +2329,147 @@ class UserController {
    * Get user OTP send history
    * GET /api/users/otp/history
    */
-  static async getOtpHistory(req, res) {
-    try {
-      const userId = req.user?.id || req.admin?.userId;
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 20;
-      const offset = (page - 1) * limit;
-      const purpose = req.query.purpose; // Filter by purpose if provided
+ static async getOtpHistory(req, res) {
+  try {
+    const adminId = req.user?.id;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const offset = (page - 1) * limit;
+    const purpose = req.query.purpose; // Filter by purpose if provided
 
-      if (!userId) {
-        return res
-          .status(401)
-          .json(ApiResponse.error('User not authenticated', 401));
-      }
-
-      // Build where clause
-      const whereClause = { userId };
-      if (purpose) {
-        whereClause.purpose = purpose;
-      }
-
-      // Get OTP history with pagination
-      const { count, rows: otpSessions } = await OTPSession.findAndCountAll({
-        where: whereClause,
-        attributes: [
-          'id',
-          'sessionId',
-          'otpType',
-          'contactInfo',
-          'purpose',
-          'isVerified',
-          'created_at',
-          'expires_at',
-          'verified_at',
-          'resendCount',
-          'ipAddress',
-        ],
-        order: [['created_at', 'DESC']],
-        limit,
-        offset,
-        distinct: true,
-      });
-
-      // Format the OTP history data
-      const formattedHistory = otpSessions.map((session) => ({
-        id: session.id,
-        sessionId: session.sessionId,
-        purpose: session.purpose,
-        type: session.otpType, // 'email' or 'sms'
-        contactInfo: session.contactInfo,
-        status: session.isVerified
-          ? 'verified'
-          : new Date() > new Date(session.expires_at)
-            ? 'expired'
-            : 'pending',
-        sentAt: session.created_at,
-        expiresAt: session.expires_at,
-        verifiedAt: session.verified_at,
-        resendCount: session.resendCount || 0,
-        ipAddress: session.ipAddress,
-      }));
-
-      // Group by purpose for summary
-      const purposeSummary = otpSessions.reduce((acc, session) => {
-        const purpose = session.purpose;
-        if (!acc[purpose]) {
-          acc[purpose] = {
-            total: 0,
-            verified: 0,
-            expired: 0,
-            pending: 0,
-          };
-        }
-        acc[purpose].total++;
-
-        if (session.is_verified) {
-          acc[purpose].verified++;
-        } else if (new Date() > new Date(session.expires_at)) {
-          acc[purpose].expired++;
-        } else {
-          acc[purpose].pending++;
-        }
-
-        return acc;
-      }, {});
-
-      const pagination = Helpers.getPaginationData(page, limit, count);
-
-      const responseData = {
-        history: formattedHistory,
-        summary: {
-          totalSent: count,
-          recentActivity: formattedHistory.slice(0, 5), // Last 5 OTPs
-          purposeBreakdown: purposeSummary,
-        },
-        pagination,
-      };
-
-      res.json(
-        ApiResponse.paginated(
-          formattedHistory,
-          pagination,
-          'OTP history retrieved successfully',
-          responseData.summary
-        )
-      );
-    } catch (error) {
-      logger.error('Get OTP history error:', error);
-      res.status(500).json(ApiResponse.error('Internal server error', 500));
+    if (!adminId) {
+      return res
+        .status(401)
+        .json(ApiResponse.error('Admin not authenticated', 401));
     }
+
+    // Fetch admin details from Admin table using adminId
+    const admin = await Admin.findByPk(adminId, {
+      attributes: ['email', 'phone'],
+    });
+
+    if (!admin) {
+      return res
+        .status(404)
+        .json(ApiResponse.error('Admin not found', 404));
+    }
+
+    // Use email or phone from the admin record to find user
+    const user = await User.findOne({
+      where: {
+        [Op.or]: [
+          { email: admin.email },
+          { phone: admin.phone }
+        ],
+      },
+      attributes: ['id'],
+    });
+
+    if (!user) {
+      return res
+        .status(404)
+        .json(ApiResponse.error('User not found with admin\'s contact info', 404));
+    }
+
+    const userId = user.id;
+
+    // Build where clause for OTP history
+    const whereClause = { userId };
+    if (purpose) {
+      whereClause.purpose = purpose;
+    }
+
+    // Get OTP history with pagination
+    const { count, rows: otpSessions } = await OTPSession.findAndCountAll({
+      where: whereClause,
+      attributes: [
+        'id',
+        'sessionId',
+        'otpType',
+        'contactInfo',
+        'purpose',
+        'isVerified',
+        'created_at',
+        'expires_at',
+        'verified_at',
+        'resendCount',
+        'ipAddress',
+      ],
+      order: [['created_at', 'DESC']],
+      limit,
+      offset,
+      distinct: true,
+    });
+
+    // Format the OTP history data
+    const formattedHistory = otpSessions.map((session) => ({
+      id: session.id,
+      sessionId: session.sessionId,
+      purpose: session.purpose,
+      type: session.otpType, // 'email' or 'sms'
+      contactInfo: session.contactInfo,
+      status: session.isVerified
+        ? 'verified'
+        : new Date() > new Date(session.expires_at)
+          ? 'expired'
+          : 'pending',
+      sentAt: session.created_at,
+      expiresAt: session.expires_at,
+      verifiedAt: session.verified_at,
+      resendCount: session.resendCount || 0,
+      ipAddress: session.ipAddress,
+    }));
+
+    // Group by purpose for summary
+    const purposeSummary = otpSessions.reduce((acc, session) => {
+      const purpose = session.purpose;
+      if (!acc[purpose]) {
+        acc[purpose] = {
+          total: 0,
+          verified: 0,
+          expired: 0,
+          pending: 0,
+        };
+      }
+      acc[purpose].total++;
+
+      if (session.is_verified) {
+        acc[purpose].verified++;
+      } else if (new Date() > new Date(session.expires_at)) {
+        acc[purpose].expired++;
+      } else {
+        acc[purpose].pending++;
+      }
+
+      return acc;
+    }, {});
+
+    const pagination = Helpers.getPaginationData(page, limit, count);
+
+    const responseData = {
+      history: formattedHistory,
+      summary: {
+        totalSent: count,
+        recentActivity: formattedHistory.slice(0, 5), // Last 5 OTPs
+        purposeBreakdown: purposeSummary,
+      },
+      pagination,
+    };
+
+    res.json(
+      ApiResponse.paginated(
+        formattedHistory,
+        pagination,
+        'OTP history retrieved successfully',
+        responseData.summary
+      )
+    );
+  } catch (error) {
+    logger.error('Get OTP history error:', error);
+    res.status(500).json(ApiResponse.error('Internal server error', 500));
   }
+}
+
 
   /**
    * Get user card details with full information
@@ -2402,16 +2477,26 @@ class UserController {
    */
   static async getCardDetails(req, res) {
     try {
-      const userId = req.user?.id || req.admin?.userId;
+      const adminId = req.user?.id;
 
-      if (!userId) {
+      if (!adminId) {
         return res
           .status(401)
           .json(ApiResponse.error('User not authenticated', 401));
       }
 
-      // Get user with card information
-      const user = await User.findByPk(userId, {
+      // Get the logged-in admin
+      const admin = await Admin.findByPk(adminId);
+
+      if (!admin) {
+        return res.status(404).json(ApiResponse.error('Admin not found', 404));
+      }
+
+      // Find user by email or phone from the Admin record
+      const user = await User.findOne({
+        where: {
+          [Op.or]: [{ email: admin.email }, { phone: admin.phone }],
+        },
         include: [
           {
             model: DiscountCard,
@@ -2446,7 +2531,7 @@ class UserController {
         return res.status(404).json(ApiResponse.error('User not found', 404));
       }
 
-      // Calculate card status
+      // Determine card status
       let cardStatus = 'inactive';
       let daysRemaining = 0;
       let isExpired = false;
@@ -2466,12 +2551,12 @@ class UserController {
         }
       }
 
-      // Get recent transactions count
+      // Count recent OTP sessions (last 30 days)
       const recentTransactionsCount = await OTPSession.count({
         where: {
           userId: user.id,
           created_at: {
-            [Op.gte]: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // Last 30 days
+            [Op.gte]: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // 30 days
           },
         },
       });
@@ -2497,7 +2582,6 @@ class UserController {
               createdAt: user.discountCard.createdAt,
             }
           : null,
-
         activity: {
           recentTransactions: recentTransactionsCount,
           isEmailVerified: user.isEmailVerified,
