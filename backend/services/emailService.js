@@ -5,9 +5,9 @@ const logger = require('../utils/logger');
 
 class EmailService {
   constructor() {
-    // Create transporter with correct method name
+    // Create transporter with Hostinger-specific configuration
     this.transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
+      host: process.env.SMTP_HOST || 'smtp.hostinger.com',
       port: parseInt(process.env.SMTP_PORT) || 587,
       secure: process.env.SMTP_PORT === '465', // true for 465, false for other ports
       auth: {
@@ -16,7 +16,15 @@ class EmailService {
       },
       tls: {
         rejectUnauthorized: false, // For development only
+        ciphers: 'SSLv3' // Sometimes needed for Hostinger
       },
+      // Add connection timeout and retry settings
+      connectionTimeout: 60000, // 60 seconds
+      greetingTimeout: 30000, // 30 seconds
+      socketTimeout: 60000, // 60 seconds
+      // Enable debug mode in development
+      debug: process.env.NODE_ENV === 'development',
+      logger: process.env.NODE_ENV === 'development'
     });
 
     // Verify connection configuration
@@ -25,28 +33,85 @@ class EmailService {
 
   async verifyConnection() {
     try {
+      logger.info('Verifying email service connection...');
+      logger.info(`SMTP Host: ${process.env.SMTP_HOST || 'smtp.hostinger.com'}`);
+      logger.info(`SMTP Port: ${process.env.SMTP_PORT || 587}`);
+      logger.info(`SMTP User: ${process.env.SMTP_USER}`);
+      
       await this.transporter.verify();
       logger.info('Email service connection verified successfully');
     } catch (error) {
-      logger.error('Email service connection failed:', error);
+      logger.error('Email service connection failed:', {
+        message: error.message,
+        code: error.code,
+        command: error.command,
+        response: error.response
+      });
+      
+      // Provide specific troubleshooting suggestions
+      if (error.code === 'EAUTH') {
+        logger.error('Authentication failed. Please check:');
+        logger.error('1. Email account exists in Hostinger panel');
+        logger.error('2. Password is correct');
+        logger.error('3. SMTP_USER matches exactly: noreply@pravasiprevilagecard.com');
+      } else if (error.code === 'ECONNECTION') {
+        logger.error('Connection failed. Please check:');
+        logger.error('1. SMTP host is correct: smtp.hostinger.com');
+        logger.error('2. Port 587 or 465 is not blocked');
+        logger.error('3. Internet connection is stable');
+      }
     }
   }
 
   async sendEmail(to, subject, html, text = null) {
     try {
+      // Validate required fields
+      if (!to || !subject || !html) {
+        throw new Error('Missing required email fields: to, subject, or html');
+      }
+
+      if (!process.env.SMTP_USER) {
+        throw new Error('SMTP_USER environment variable is not set');
+      }
+
       const mailOptions = {
         from: `"${process.env.APP_NAME || 'SmartDiscounts'}" <${process.env.SMTP_USER}>`,
         to,
         subject,
         html,
         text: text || this.stripHtml(html),
+        // Add headers for better deliverability
+        headers: {
+          'X-Mailer': 'SmartDiscounts Mailer',
+          'X-Priority': '3',
+          'Importance': 'Normal'
+        }
       };
+
+      logger.info(`Attempting to send email to: ${to}`);
+      logger.info(`From: ${mailOptions.from}`);
+      logger.info(`Subject: ${subject}`);
 
       const result = await this.transporter.sendMail(mailOptions);
       logger.info(`Email sent successfully to ${to}: ${result.messageId}`);
       return result;
     } catch (error) {
-      logger.error('Email sending failed:', error);
+      logger.error('Email sending failed:', {
+        to,
+        subject,
+        error: error.message,
+        code: error.code,
+        command: error.command,
+        response: error.response
+      });
+      
+      // Provide specific error context
+      if (error.code === 'EAUTH') {
+        logger.error('Authentication error - check SMTP credentials');
+      } else if (error.code === 'EMESSAGE') {
+        logger.error('Message error - check email content and recipients');
+      }
+      
       throw error;
     }
   }
@@ -508,6 +573,19 @@ class EmailService {
       logger.error('Test email failed:', error);
       throw error;
     }
+  }
+
+  // Add a method to validate email configuration
+  validateConfiguration() {
+    const requiredEnvVars = ['SMTP_HOST', 'SMTP_USER', 'SMTP_PASS'];
+    const missing = requiredEnvVars.filter(varName => !process.env[varName]);
+    
+    if (missing.length > 0) {
+      throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+    }
+
+    logger.info('Email configuration validation passed');
+    return true;
   }
 }
 

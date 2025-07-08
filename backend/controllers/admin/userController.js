@@ -13,6 +13,7 @@ const Helpers = require('../../utils/helpers');
 const EmailService = require('../../services/emailService');
 const logger = require('../../utils/logger');
 const crypto = require('crypto');
+const emailService = require('../../services/emailService');
 
 class UserController {
   /**
@@ -549,17 +550,17 @@ class UserController {
         userAgent: req.get('User-Agent'),
       });
 
-      // Optional: Generate and send email content
-      // const emailContent = UserController.generateEmailContent(
-      //   otpCode,
-      //   type,
-      //   fullName || user.fullName
-      // );
-      // await EmailService.sendEmail(
-      //   contactInfo,
-      //   emailContent.subject,
-      //   emailContent.html
-      // );
+      const emailContent = UserController.generateEmailContent(
+        otpCode,
+        type,
+        fullName || user.fullName
+      );
+      
+      await emailService.sendEmail(
+        contactInfo,
+        emailContent.subject,
+        emailContent.html
+      );
 
       logger.info(`Email OTP sent to ${contactInfo} for user ${userId}`);
 
