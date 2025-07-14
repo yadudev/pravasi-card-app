@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import pravasiLogo from '../assets/images/pravasi-logo.png';
-import { ArrowLeft, Eye, EyeClosed, Loader2 } from 'lucide-react';
+import { ArrowLeft, Eye, EyeClosed, Loader2, AlertCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../constants/AuthContext';
 import { usersAPI } from '../services/api';
+import toast from 'react-hot-toast';
+import Swal from 'sweetalert2';
 
 const LoginModal = ({
   isOpen,
@@ -25,6 +27,7 @@ const LoginModal = ({
     password: false,
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
 
   const togglePasswordVisibility = (field) => {
     setShowPassword((prev) => ({
@@ -32,6 +35,18 @@ const LoginModal = ({
       [field]: !prev[field],
     }));
   };
+
+  // Clear form and errors when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setErrors({});
+      setFormData({
+        emailOrNumber: '',
+        password: '',
+        rememberMe: false,
+      });
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     const handleEscape = (e) => {
@@ -58,7 +73,7 @@ const LoginModal = ({
       [name]: type === 'checkbox' ? checked : value,
     }));
 
-    // Clear error when user starts typing
+    // Clear field-specific error when user starts typing
     if (errors[name]) {
       setErrors((prev) => ({
         ...prev,
@@ -93,6 +108,178 @@ const LoginModal = ({
     return Object.keys(newErrors).length === 0;
   };
 
+  // Enhanced error handling with different UI approaches
+  const handleAPIError = async (error, context = 'general') => {
+    
+    const status = error?.response?.status;
+    const message = error?.response?.data?.message || error?.message?.error;
+
+    // Handle AuthContext errors specifically - now with proper API messages
+    if (context === 'login' && error?.message && !error?.response) {
+      const errorMsg = (error?.message || '').toLowerCase();
+      console.log('Processing AuthContext login error, message:', errorMsg);
+      
+      // Check for rate limiting / too many attempts messages
+      if (errorMsg.includes('too many') || errorMsg.includes('rate limit') || errorMsg.includes('try again later') || errorMsg.includes('attempt')) {
+        console.log('Detected rate limiting error, showing toast');
+        toast.error(error.message, {
+          duration: 6000,
+          position: 'top-center',
+        });
+        return;
+      }
+      
+      // Check for invalid credentials messages
+      if (errorMsg.includes('invalid') || errorMsg.includes('wrong') || errorMsg.includes('incorrect') || errorMsg.includes('password')) {
+        console.log('Detected invalid credentials error, showing inline error');
+        setErrors({ 
+          password: error.message
+        });
+        return;
+      }
+      
+      // Check for user not found messages
+      if (errorMsg.includes('not found') || errorMsg.includes('no user') || errorMsg.includes('user does not exist') || errorMsg.includes('not exist')) {
+        console.log('Detected user not found error, showing inline error');
+        setErrors({ 
+          emailOrNumber: error.message
+        });
+        return;
+      }
+      
+      // Check for account status messages
+      if (errorMsg.includes('suspended') || errorMsg.includes('banned') || errorMsg.includes('deactivated') || errorMsg.includes('blocked') || errorMsg.includes('inactive')) {
+        console.log('Detected account status error, showing SweetAlert');
+        await Swal.fire({
+          title: 'Account Issue',
+          text: error.message,
+          icon: 'error',
+          confirmButtonText: 'Contact Support',
+          confirmButtonColor: '#d33',
+          allowOutsideClick: false,
+        });
+        return;
+      }
+      
+      if (errorMsg.includes('locked')) {
+        console.log('Detected account locked error, showing SweetAlert');
+        await Swal.fire({
+          title: 'Account Locked',
+          text: error.message,
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonText: 'Reset Password',
+          cancelButtonText: 'Try Later',
+          confirmButtonColor: '#3085d6',
+        }).then((result) => {
+          if (result.isConfirmed) {
+            handleForgotPasswordClick();
+          }
+        });
+        return;
+      }
+      
+      // For any other login error, show as inline error on password field
+      console.log('No specific match found, showing fallback inline error');
+      setErrors({ 
+        password: error.message || 'Login failed. Please try again.' 
+      });
+      return;
+    }
+
+    // Handle string errors from AuthContext (legacy support)
+    if (context === 'login' && typeof error === 'string') {
+      const errorMsg = error.toLowerCase();
+      console.log('Processing string error:', errorMsg);
+      
+      if (errorMsg.includes('too many') || errorMsg.includes('rate limit') || errorMsg.includes('try again later') || errorMsg.includes('attempt')) {
+        toast.error(error, {
+          duration: 6000,
+          position: 'top-center',
+        });
+        return;
+      }
+      
+      if (errorMsg.includes('invalid') || errorMsg.includes('wrong') || errorMsg.includes('incorrect')) {
+        setErrors({ 
+          password: error
+        });
+        return;
+      }
+      
+      // Fallback for string errors
+      setErrors({ 
+        password: error || 'Login failed. Please check your credentials and try again.' 
+      });
+      return;
+    }
+
+    // Critical errors that need SweetAlert2 (HTTP status based)
+    if (status === 403) {
+      await Swal.fire({
+        title: 'Account Suspended',
+        text: 'Your account has been suspended. Please contact support for assistance.',
+        icon: 'error',
+        confirmButtonText: 'Contact Support',
+        confirmButtonColor: '#d33',
+        allowOutsideClick: false,
+      });
+      return;
+    }
+
+    if (status === 423) {
+      await Swal.fire({
+        title: 'Account Locked',
+        text: 'Your account has been temporarily locked due to multiple failed login attempts. Please try again later or reset your password.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Reset Password',
+        cancelButtonText: 'Try Later',
+        confirmButtonColor: '#3085d6',
+      }).then((result) => {
+        if (result.isConfirmed) {
+          handleForgotPasswordClick();
+        }
+      });
+      return;
+    }
+
+    // Field-specific errors (use inline) - HTTP status based
+    if (status === 404 && context === 'login') {
+      setErrors({ 
+        emailOrNumber: 'No account found with this email or mobile number' 
+      });
+      return;
+    }
+
+    if (status === 401 && context === 'login') {
+      setErrors({ 
+        password: 'Invalid password. Please check and try again.' 
+      });
+      return;
+    }
+
+    // General errors (use toast)
+    let toastMessage = 'An unexpected error occurred. Please try again.';
+    
+    if (status === 429) {
+      toastMessage = 'Too many attempts. Please wait a few minutes before trying again.';
+    } else if (status >= 500) {
+      toastMessage = 'Server error. Please try again later.';
+    } else if (error?.code === 'NETWORK_ERROR' || !navigator.onLine) {
+      toastMessage = 'No internet connection. Please check your network.';
+    } else if (message) {
+      toastMessage = message;
+    }
+
+    console.log('No specific handler matched, showing toast with message:', toastMessage);
+
+    toast.error(toastMessage, {
+      duration: 4000,
+      position: 'top-center',
+    });
+  };
+
   // Function to fetch user profile and check completeness using existing API
   const fetchUserProfile = async () => {
     try {
@@ -106,7 +293,6 @@ const LoginModal = ({
 
   // Function to check if profile is complete
   const checkProfileCompleteness = (profileData) => {
-    // Check the isProfileCompleted boolean field from user table
     return profileData?.data?.status?.isProfileComplete === true;
   };
 
@@ -126,6 +312,7 @@ const LoginModal = ({
   };
 
   const handleForgotPasswordClick = async () => {
+    // Inline validation for forgot password
     if (!formData.emailOrNumber.trim()) {
       setErrors({
         emailOrNumber: 'Please enter your email or mobile number first',
@@ -133,18 +320,50 @@ const LoginModal = ({
       return;
     }
 
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const phoneRegex = /^[0-9]{10,15}$/;
+    const input = formData.emailOrNumber.trim();
+
+    if (!emailRegex.test(input) && !phoneRegex.test(input)) {
+      setErrors({
+        emailOrNumber: 'Please enter a valid email or mobile number',
+      });
+      return;
+    }
+
+    setForgotPasswordLoading(true);
+    setErrors({});
+
+    // Show loading toast
+    const loadingToast = toast.loading('Sending reset instructions...');
+
     try {
       await usersAPI.forgotPassword(formData.emailOrNumber.trim());
-      alert(
-        'Password reset instructions have been sent to your email/mobile number.'
+      
+      toast.dismiss(loadingToast);
+      toast.success(
+        `Reset instructions sent to ${
+          emailRegex.test(input) ? 'your email' : 'your mobile number'
+        }. Please check and follow the instructions.`,
+        {
+          duration: 6000,
+          position: 'top-center',
+        }
       );
     } catch (error) {
+      toast.dismiss(loadingToast);
       console.error('Forgot password error:', error);
-      setErrors({
-        general:
-          error.response?.data?.message ||
-          'Failed to send reset instructions. Please try again.',
-      });
+      
+      // Handle forgot password errors with appropriate UI
+      if (error?.response?.status === 404) {
+        setErrors({
+          emailOrNumber: 'No account found with this email or mobile number',
+        });
+      } else {
+        await handleAPIError(error, 'forgotPassword');
+      }
+    } finally {
+      setForgotPasswordLoading(false);
     }
   };
 
@@ -156,23 +375,29 @@ const LoginModal = ({
     setIsLoading(true);
     setErrors({});
 
+    // Show loading toast
+    const loadingToast = toast.loading('Logging in...');
+
     try {
-      // Use the login function from AuthContext
       const result = await login(formData.emailOrNumber, formData.password);
 
       if (result.success) {
-        // Login successful - AuthContext handles token storage and user state
+        toast.dismiss(loadingToast);
+        
+        // Show success toast
+        toast.success('Login successful! Welcome back.', {
+          duration: 3000,
+          position: 'top-center',
+        });
 
         try {
-          // Fetch user profile to check completeness using existing API
           const profileData = await fetchUserProfile();
           const isProfileComplete = checkProfileCompleteness(profileData);
+          
           // Close the modal
           onClose();
 
-          // Check profile completeness and navigate accordingly
           if (!isProfileComplete) {
-            // Profile incomplete - show activation modal
             if (onSignupSuccess) {
               setFormData({
                 emailOrNumber: '',
@@ -186,15 +411,18 @@ const LoginModal = ({
               });
             }
           } else {
-            // Profile complete - navigate to search
             navigate('/search');
           }
         } catch (profileError) {
           console.error('Error fetching user profile:', profileError);
+          
+          // Show warning toast for profile fetch failure
+          toast.error('Could not verify profile status. Please refresh the page.', {
+            duration: 4000,
+          });
 
-          // Fallback to the original method if profile API fails
+          // Fallback logic
           if (result.user && !result.user.isProfileComplete) {
-            // Profile incomplete - show activation modal
             if (onSignupSuccess) {
               onSignupSuccess(result.user.id, {
                 email: result.user.email,
@@ -203,22 +431,25 @@ const LoginModal = ({
               });
             }
           } else {
-            // Profile complete - navigate to search
             navigate('/search');
           }
-
-          // Optionally show a warning that profile check failed
-          console.warn(
-            'Profile completeness check failed, using fallback method'
-          );
         }
       } else {
-        // Login failed - show error from AuthContext
-        setErrors({ general: result.error });
+        toast.dismiss(loadingToast);
+        
+        // Debug: Log what we're receiving
+        console.log('Login failed with result:', result);
+        console.log('result.error:', result.error);
+        
+        // Handle login failure - AuthContext now properly extracts API messages
+        await handleAPIError({ message: result.error }, 'login');
       }
     } catch (error) {
+      toast.dismiss(loadingToast);
       console.error('Login error:', error);
-      setErrors({ general: 'An unexpected error occurred. Please try again.' });
+      
+      // For catch block errors, we might have the actual HTTP response
+      await handleAPIError(error, 'login');
     } finally {
       setIsLoading(false);
     }
@@ -226,7 +457,6 @@ const LoginModal = ({
 
   if (!isOpen) return null;
 
-  // Combine local loading state with auth loading state
   const isSubmitting = isLoading || authLoading;
 
   return (
@@ -237,7 +467,6 @@ const LoginModal = ({
       <div className="bg-[#F5F5F5] rounded-3xl border-white border-4 shadow-2xl w-full max-w-lg mx-4 relative p-6">
         {/* Header with Back Button and Logo */}
         <div className="flex items-center justify-between">
-          {/* Back Button */}
           <button
             onClick={handleBackClick}
             className="flex items-center text-black hover:text-gray-800 transition-colors pl-6 focus:outline-none"
@@ -245,7 +474,6 @@ const LoginModal = ({
           >
             <ArrowLeft size={30} />
           </button>
-          {/* Pravasi Logo */}
           <img
             src={pravasiLogo}
             alt="Pravasi Logo"
@@ -260,13 +488,6 @@ const LoginModal = ({
         <div className="px-4">
           <h2 className="text-4xl font-bold mb-4 text-center">Login</h2>
 
-          {/* General Error Message */}
-          {errors.general && (
-            <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg">
-              {errors.general}
-            </div>
-          )}
-
           <form className="space-y-4" onSubmit={handleSubmit}>
             <div>
               <label className="block text-base font-normal text-black mb-2">
@@ -280,13 +501,15 @@ const LoginModal = ({
                 onChange={handleInputChange}
                 disabled={isSubmitting}
                 className={`w-full px-4 py-3 border rounded-lg placeholder-gray-400 bg-white transition-colors ${
-                  errors.emailOrNumber ? 'border-red-500' : ''
+                  errors.emailOrNumber ? 'border-red-500 bg-red-50' : 'border-gray-300'
                 } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
               />
+              {/* Inline error for field validation */}
               {errors.emailOrNumber && (
-                <p className="text-red-500 text-xs mt-1">
-                  {errors.emailOrNumber}
-                </p>
+                <div className="flex items-center mt-1">
+                  <AlertCircle className="w-4 h-4 mr-1 text-red-500" />
+                  <p className="text-red-500 text-xs">{errors.emailOrNumber}</p>
+                </div>
               )}
             </div>
 
@@ -298,9 +521,12 @@ const LoginModal = ({
                 <button
                   type="button"
                   onClick={handleForgotPasswordClick}
-                  className="text-base font-normal text-black hover:underline cursor-pointer focus:outline-none"
-                  disabled={isSubmitting}
+                  className="text-base font-normal text-black hover:underline cursor-pointer focus:outline-none flex items-center"
+                  disabled={isSubmitting || forgotPasswordLoading}
                 >
+                  {forgotPasswordLoading && (
+                    <Loader2 className="animate-spin mr-1" size={14} />
+                  )}
                   Forgot password?
                 </button>
               </div>
@@ -313,7 +539,7 @@ const LoginModal = ({
                   onChange={handleInputChange}
                   disabled={isSubmitting}
                   className={`w-full px-4 py-3 border rounded-lg placeholder-gray-400 bg-white pr-12 transition-colors ${
-                    errors.password ? 'border-red-500' : 'border-gray-300'
+                    errors.password ? 'border-red-500 bg-red-50' : 'border-gray-300'
                   } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
                 />
                 <button
@@ -329,8 +555,12 @@ const LoginModal = ({
                   )}
                 </button>
               </div>
+              {/* Inline error for field validation */}
               {errors.password && (
-                <p className="text-red-500 text-xs mt-1">{errors.password}</p>
+                <div className="flex items-center mt-1">
+                  <AlertCircle className="w-4 h-4 mr-1 text-red-500" />
+                  <p className="text-red-500 text-xs">{errors.password}</p>
+                </div>
               )}
             </div>
 

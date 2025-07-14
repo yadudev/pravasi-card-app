@@ -4,16 +4,22 @@ class ApiResponse {
       success: true,
       message,
       data,
-      timestamp: new Date().toISOString()
+      status: statusCode,
+      timestamp: new Date().toISOString(),
     };
   }
 
-  static error(message = 'Internal Server Error', statusCode = 500, errors = null) {
+  static error(
+    message = 'Internal Server Error',
+    statusCode = 500,
+    errors = null
+  ) {
     return {
       success: false,
       message,
       errors,
-      timestamp: new Date().toISOString()
+      status: statusCode,
+      timestamp: new Date().toISOString(),
     };
   }
 
@@ -23,7 +29,7 @@ class ApiResponse {
       message,
       data,
       pagination,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     };
   }
 
@@ -32,7 +38,7 @@ class ApiResponse {
       success: false,
       message: 'Validation failed',
       errors,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     };
   }
 }

@@ -90,7 +90,7 @@ export const authAPI = {
       body: JSON.stringify(credentials),
     }),
 
-  logout: () => apiCall('/admin/logout', { method: 'POST' }),
+  logout: () => apiCall('/auth/logout', { method: 'POST' }),
 
   refreshToken: () => apiCall('/admin/auth/refresh-token', { method: 'POST' }),
   verifyToken: () => {

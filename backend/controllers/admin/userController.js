@@ -5,7 +5,7 @@ const {
   Shop,
   sequelize,
   Admin,
-  OTPSession,
+  OTPSessions,
 } = require('../../models');
 const { Op } = require('sequelize');
 const ApiResponse = require('../../utils/responses');
@@ -509,7 +509,7 @@ class UserController {
       const userId = user.id;
 
       // ✅ Rate limiting check (1 min cooldown)
-      const recentCount = await OTPSession.countRecentRequests(
+      const recentCount = await OTPSessions.countRecentRequests(
         userId,
         contactInfo,
         1
@@ -523,7 +523,7 @@ class UserController {
       }
 
       // ✅ Daily limit check (10 per day)
-      const dailyCount = await OTPSession.countDailyRequests(
+      const dailyCount = await OTPSessions.countDailyRequests(
         userId,
         contactInfo
       );
@@ -540,7 +540,7 @@ class UserController {
 
       // ✅ Generate OTP and create session
       const otpCode = UserController.generateOTP();
-      const session = await OTPSession.createSession({
+      const session = await OTPSessions.createSession({
         userId,
         otpCode,
         otpType: 'email',
@@ -591,7 +591,7 @@ class UserController {
       const { otp, sessionId, email } = req.body;
 
       // Fetch session details by sessionId
-      const session = await OTPSession.findBySessionId(sessionId);
+      const session = await OTPSessions.findBySessionId(sessionId);
 
       if (!session) {
         return res
@@ -612,13 +612,13 @@ class UserController {
       }
 
       // Validate OTP using model method
-      await OTPSession.validateOTP(sessionId, otp, user.id);
+      await OTPSessions.validateOTP(sessionId, otp, user.id);
 
       // Handle OTP verification success for the user
       await UserController.handleOTPVerificationSuccess(
         session.purpose,
         user.id,
-        email || user.email // Fallback to user email if email is not provided
+        email || user.email 
       );
 
       logger.info(
@@ -653,7 +653,7 @@ class UserController {
       const { email, sessionId } = req.body;
 
       // Fetch session details by sessionId
-      const session = await OTPSession.findBySessionId(sessionId);
+      const session = await OTPSessions.findBySessionId(sessionId);
 
       if (!session) {
         return res
@@ -693,17 +693,17 @@ class UserController {
       const newOtpCode = UserController.generateOTP();
       const updatedSession = await session.updateForResend(newOtpCode);
 
-      // Generate and send the OTP via email
-      // const emailContent = UserController.generateEmailContent(
-      //   newOtpCode,
-      //   session.purpose,
-      //   user.fullName
-      // );
-      // await EmailService.sendEmail(
-      //   email,
-      //   emailContent.subject,
-      //   emailContent.html
-      // );
+      //Generate and send the OTP via email
+      const emailContent = UserController.generateEmailContent(
+        newOtpCode,
+        session.purpose,
+        user.fullName
+      );
+      await EmailService.sendEmail(
+        email,
+        emailContent.subject,
+        emailContent.html
+      );
 
       logger.info(`Email OTP resent to ${email} for user ${user.id}`);
 
@@ -752,7 +752,7 @@ class UserController {
       }
 
       // ✅ Rate limiting check
-      const recentCount = await OTPSession.countRecentRequests(
+      const recentCount = await OTPSessions.countRecentRequests(
         userId,
         phone,
         1
@@ -766,7 +766,7 @@ class UserController {
       }
 
       // ✅ Daily limit check
-      const dailyCount = await OTPSession.countDailyRequests(userId, phone);
+      const dailyCount = await OTPSessions.countDailyRequests(userId, phone);
       if (dailyCount >= 10) {
         return res
           .status(429)
@@ -780,7 +780,7 @@ class UserController {
 
       // ✅ Generate OTP and create session
       const otpCode = this.generateOTP();
-      const session = await OTPSession.createSession({
+      const session = await OTPSessions.createSession({
         userId,
         otpCode,
         otpType: 'sms',
@@ -825,7 +825,7 @@ class UserController {
       const userId = req.user?.id || req.admin?.userId;
 
       // ✅ Validate OTP using model method
-      const session = await OTPSession.validateOTP(sessionId, otp, userId);
+      const session = await OTPSessions.validateOTP(sessionId, otp, userId);
 
       // Perform action based on purpose
       await this.handleOTPVerificationSuccess(session.purpose, userId, phone);
@@ -863,7 +863,7 @@ class UserController {
       const userId = req.user?.id || req.admin?.userId;
 
       // ✅ Find existing session
-      const session = await OTPSession.findBySessionId(sessionId);
+      const session = await OTPSessions.findBySessionId(sessionId);
 
       if (!session || session.userId !== userId) {
         return res
@@ -2381,7 +2381,7 @@ class UserController {
     }
 
     // Get OTP history with pagination
-    const { count, rows: otpSessions } = await OTPSession.findAndCountAll({
+    const { count, rows: otpSessions } = await OTPSessions.findAndCountAll({
       where: whereClause,
       attributes: [
         'id',
@@ -2553,7 +2553,7 @@ class UserController {
       }
 
       // Count recent OTP sessions (last 30 days)
-      const recentTransactionsCount = await OTPSession.count({
+      const recentTransactionsCount = await OTPSessions.count({
         where: {
           userId: user.id,
           created_at: {
