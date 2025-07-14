@@ -12,6 +12,8 @@ const ShopEditModal = ({ isOpen, shop, onClose, onSave }) => {
     phone: '',
     address: '',
     location: '',
+    latitude: '',
+    longitude: '',
     category: '',
     description: '',
     discountOffered: 0,
@@ -51,6 +53,8 @@ const ShopEditModal = ({ isOpen, shop, onClose, onSave }) => {
         phone: shop.phone || '',
         address: shop.address || '',
         location: shop.location || '',
+        latitude: shop.latitude || '',
+        longitude: shop.longitude || '',
         category: shop.category || '',
         description: shop.description || '',
         discountOffered: shop.discountOffered || 0,
@@ -78,6 +82,8 @@ const ShopEditModal = ({ isOpen, shop, onClose, onSave }) => {
         phone: shop.phone || '',
         address: shop.address || '',
         location: shop.location || '',
+        latitude: shop.latitude || '',
+        longitude: shop.longitude || '',
         category: shop.category || '',
         description: shop.description || '',
         discountOffered: shop.discountOffered || 0,
@@ -138,6 +144,14 @@ const ShopEditModal = ({ isOpen, shop, onClose, onSave }) => {
       newErrors.discountOffered = 'Discount must be between 0 and 100';
     }
 
+    // Validate latitude and longitude if provided (optional fields)
+    if (formData.latitude && (isNaN(formData.latitude) || formData.latitude < -90 || formData.latitude > 90)) {
+      newErrors.latitude = 'Latitude must be between -90 and 90';
+    }
+    if (formData.longitude && (isNaN(formData.longitude) || formData.longitude < -180 || formData.longitude > 180)) {
+      newErrors.longitude = 'Longitude must be between -180 and 180';
+    }
+
     // Optional field validations
     if (formData.gstNumber && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(formData.gstNumber)) {
       newErrors.gstNumber = 'Please provide a valid GST number';
@@ -170,7 +184,12 @@ const ShopEditModal = ({ isOpen, shop, onClose, onSave }) => {
       const payload = {};
       Object.keys(formData).forEach(key => {
         if (formData[key] !== (shop[key] || '')) {
-          payload[key] = formData[key];
+          // Handle latitude and longitude conversion
+          if (key === 'latitude' || key === 'longitude') {
+            payload[key] = formData[key] ? parseFloat(formData[key]) : null;
+          } else {
+            payload[key] = formData[key];
+          }
         }
       });
 
@@ -397,6 +416,45 @@ const ShopEditModal = ({ isOpen, shop, onClose, onSave }) => {
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             placeholder="Enter nearby landmark or location"
           />
+        </div>
+
+        {/* Latitude and Longitude Fields */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Latitude (Optional)
+            </label>
+            <input
+              type="number"
+              step="any"
+              value={formData.latitude}
+              onChange={(e) => handleInputChange('latitude', e.target.value)}
+              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                errors.latitude ? 'border-red-500' : 'border-gray-300'
+              }`}
+              placeholder="e.g., 12.9716"
+            />
+            {errors.latitude && <p className="text-red-500 text-sm mt-1">{errors.latitude}</p>}
+            <p className="text-xs text-gray-500 mt-1">Range: -90 to 90</p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Longitude (Optional)
+            </label>
+            <input
+              type="number"
+              step="any"
+              value={formData.longitude}
+              onChange={(e) => handleInputChange('longitude', e.target.value)}
+              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                errors.longitude ? 'border-red-500' : 'border-gray-300'
+              }`}
+              placeholder="e.g., 77.5946"
+            />
+            {errors.longitude && <p className="text-red-500 text-sm mt-1">{errors.longitude}</p>}
+            <p className="text-xs text-gray-500 mt-1">Range: -180 to 180</p>
+          </div>
         </div>
       </div>
     </div>

@@ -555,7 +555,7 @@ class UserController {
         type,
         fullName || user.fullName
       );
-      
+
       await emailService.sendEmail(
         contactInfo,
         emailContent.subject,
@@ -618,7 +618,7 @@ class UserController {
       await UserController.handleOTPVerificationSuccess(
         session.purpose,
         user.id,
-        email || user.email 
+        email || user.email
       );
 
       logger.info(
@@ -1291,9 +1291,14 @@ class UserController {
       // Build base WHERE conditions
       let baseConditions = `isActive = true AND status = 'approved'`;
 
-      // Add search conditions
       if (search) {
-        baseConditions += ` AND (name LIKE '%${search}%' OR description LIKE '%${search}%' OR category LIKE '%${search}%' OR tags LIKE '%${search}%')`;
+        const lowerSearch = search.toLowerCase();
+        baseConditions += ` AND (
+    LOWER(name) LIKE '%${lowerSearch}%' OR
+    LOWER(description) LIKE '%${lowerSearch}%' OR
+    LOWER(category) LIKE '%${lowerSearch}%' OR
+    LOWER(tags) LIKE '%${lowerSearch}%'
+  )`;
       }
 
       // Add category filter
@@ -1417,7 +1422,7 @@ class UserController {
           ORDER BY ${sortBy === 'discount' ? 'discountOffered' : sortBy === 'rating' ? 'averageRating' : sortBy} ${sortOrder}
           LIMIT ${limit} OFFSET ${offset}
         `;
-        c;
+
         const countQuery = `
           SELECT COUNT(*) as total
           FROM shops 
@@ -2330,147 +2335,143 @@ class UserController {
    * Get user OTP send history
    * GET /api/users/otp/history
    */
- static async getOtpHistory(req, res) {
-  try {
-    const adminId = req.user?.id;
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 20;
-    const offset = (page - 1) * limit;
-    const purpose = req.query.purpose; // Filter by purpose if provided
+  static async getOtpHistory(req, res) {
+    try {
+      const adminId = req.user?.id;
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 20;
+      const offset = (page - 1) * limit;
+      const purpose = req.query.purpose; // Filter by purpose if provided
 
-    if (!adminId) {
-      return res
-        .status(401)
-        .json(ApiResponse.error('Admin not authenticated', 401));
-    }
+      if (!adminId) {
+        return res
+          .status(401)
+          .json(ApiResponse.error('Admin not authenticated', 401));
+      }
 
-    // Fetch admin details from Admin table using adminId
-    const admin = await Admin.findByPk(adminId, {
-      attributes: ['email', 'phone'],
-    });
+      // Fetch admin details from Admin table using adminId
+      const admin = await Admin.findByPk(adminId, {
+        attributes: ['email', 'phone'],
+      });
 
-    if (!admin) {
-      return res
-        .status(404)
-        .json(ApiResponse.error('Admin not found', 404));
-    }
+      if (!admin) {
+        return res.status(404).json(ApiResponse.error('Admin not found', 404));
+      }
 
-    // Use email or phone from the admin record to find user
-    const user = await User.findOne({
-      where: {
-        [Op.or]: [
-          { email: admin.email },
-          { phone: admin.phone }
+      // Use email or phone from the admin record to find user
+      const user = await User.findOne({
+        where: {
+          [Op.or]: [{ email: admin.email }, { phone: admin.phone }],
+        },
+        attributes: ['id'],
+      });
+
+      if (!user) {
+        return res
+          .status(404)
+          .json(
+            ApiResponse.error("User not found with admin's contact info", 404)
+          );
+      }
+
+      const userId = user.id;
+
+      // Build where clause for OTP history
+      const whereClause = { userId };
+      if (purpose) {
+        whereClause.purpose = purpose;
+      }
+
+      // Get OTP history with pagination
+      const { count, rows: otpSessions } = await OTPSessions.findAndCountAll({
+        where: whereClause,
+        attributes: [
+          'id',
+          'sessionId',
+          'otpType',
+          'contactInfo',
+          'purpose',
+          'isVerified',
+          'created_at',
+          'expires_at',
+          'verified_at',
+          'resendCount',
+          'ipAddress',
         ],
-      },
-      attributes: ['id'],
-    });
+        order: [['created_at', 'DESC']],
+        limit,
+        offset,
+        distinct: true,
+      });
 
-    if (!user) {
-      return res
-        .status(404)
-        .json(ApiResponse.error('User not found with admin\'s contact info', 404));
-    }
+      // Format the OTP history data
+      const formattedHistory = otpSessions.map((session) => ({
+        id: session.id,
+        sessionId: session.sessionId,
+        purpose: session.purpose,
+        type: session.otpType, // 'email' or 'sms'
+        contactInfo: session.contactInfo,
+        status: session.isVerified
+          ? 'verified'
+          : new Date() > new Date(session.expires_at)
+            ? 'expired'
+            : 'pending',
+        sentAt: session.created_at,
+        expiresAt: session.expires_at,
+        verifiedAt: session.verified_at,
+        resendCount: session.resendCount || 0,
+        ipAddress: session.ipAddress,
+      }));
 
-    const userId = user.id;
+      // Group by purpose for summary
+      const purposeSummary = otpSessions.reduce((acc, session) => {
+        const purpose = session.purpose;
+        if (!acc[purpose]) {
+          acc[purpose] = {
+            total: 0,
+            verified: 0,
+            expired: 0,
+            pending: 0,
+          };
+        }
+        acc[purpose].total++;
 
-    // Build where clause for OTP history
-    const whereClause = { userId };
-    if (purpose) {
-      whereClause.purpose = purpose;
-    }
+        if (session.is_verified) {
+          acc[purpose].verified++;
+        } else if (new Date() > new Date(session.expires_at)) {
+          acc[purpose].expired++;
+        } else {
+          acc[purpose].pending++;
+        }
 
-    // Get OTP history with pagination
-    const { count, rows: otpSessions } = await OTPSessions.findAndCountAll({
-      where: whereClause,
-      attributes: [
-        'id',
-        'sessionId',
-        'otpType',
-        'contactInfo',
-        'purpose',
-        'isVerified',
-        'created_at',
-        'expires_at',
-        'verified_at',
-        'resendCount',
-        'ipAddress',
-      ],
-      order: [['created_at', 'DESC']],
-      limit,
-      offset,
-      distinct: true,
-    });
+        return acc;
+      }, {});
 
-    // Format the OTP history data
-    const formattedHistory = otpSessions.map((session) => ({
-      id: session.id,
-      sessionId: session.sessionId,
-      purpose: session.purpose,
-      type: session.otpType, // 'email' or 'sms'
-      contactInfo: session.contactInfo,
-      status: session.isVerified
-        ? 'verified'
-        : new Date() > new Date(session.expires_at)
-          ? 'expired'
-          : 'pending',
-      sentAt: session.created_at,
-      expiresAt: session.expires_at,
-      verifiedAt: session.verified_at,
-      resendCount: session.resendCount || 0,
-      ipAddress: session.ipAddress,
-    }));
+      const pagination = Helpers.getPaginationData(page, limit, count);
 
-    // Group by purpose for summary
-    const purposeSummary = otpSessions.reduce((acc, session) => {
-      const purpose = session.purpose;
-      if (!acc[purpose]) {
-        acc[purpose] = {
-          total: 0,
-          verified: 0,
-          expired: 0,
-          pending: 0,
-        };
-      }
-      acc[purpose].total++;
-
-      if (session.is_verified) {
-        acc[purpose].verified++;
-      } else if (new Date() > new Date(session.expires_at)) {
-        acc[purpose].expired++;
-      } else {
-        acc[purpose].pending++;
-      }
-
-      return acc;
-    }, {});
-
-    const pagination = Helpers.getPaginationData(page, limit, count);
-
-    const responseData = {
-      history: formattedHistory,
-      summary: {
-        totalSent: count,
-        recentActivity: formattedHistory.slice(0, 5), // Last 5 OTPs
-        purposeBreakdown: purposeSummary,
-      },
-      pagination,
-    };
-
-    res.json(
-      ApiResponse.paginated(
-        formattedHistory,
+      const responseData = {
+        history: formattedHistory,
+        summary: {
+          totalSent: count,
+          recentActivity: formattedHistory.slice(0, 5), // Last 5 OTPs
+          purposeBreakdown: purposeSummary,
+        },
         pagination,
-        'OTP history retrieved successfully',
-        responseData.summary
-      )
-    );
-  } catch (error) {
-    logger.error('Get OTP history error:', error);
-    res.status(500).json(ApiResponse.error('Internal server error', 500));
-  }
-}
+      };
 
+      res.json(
+        ApiResponse.paginated(
+          formattedHistory,
+          pagination,
+          'OTP history retrieved successfully',
+          responseData.summary
+        )
+      );
+    } catch (error) {
+      logger.error('Get OTP history error:', error);
+      res.status(500).json(ApiResponse.error('Internal server error', 500));
+    }
+  }
 
   /**
    * Get user card details with full information
