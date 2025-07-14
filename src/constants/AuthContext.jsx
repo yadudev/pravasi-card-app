@@ -41,6 +41,35 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('userData');
   };
 
+  // Helper function to extract API error message
+  const extractApiErrorMessage = (error) => {
+    // First, try to get the message from the API response
+    if (error?.response?.data?.message) {
+      return error.response.data.message;
+    }
+    
+    // If no API message, check for standard HTTP status codes
+    const status = error?.response?.status;
+    const errorMessage = error?.message || '';
+    
+    if (status === 401 || errorMessage.includes('401')) {
+      return 'Invalid email or password';
+    } else if (status === 403 || errorMessage.includes('403')) {
+      return 'Account is blocked or inactive';
+    } else if (status === 400 || errorMessage.includes('400')) {
+      return 'Please check your login credentials';
+    } else if (status === 404 || errorMessage.includes('404')) {
+      return 'User not found';
+    } else if (status === 429 || errorMessage.includes('429')) {
+      return 'Too many attempts. Please try again later';
+    } else if (status >= 500 || errorMessage.includes('500')) {
+      return 'Server error. Please try again later';
+    }
+    
+    // Fallback to generic network error
+    return error?.message;
+  };
+
   // Check if user is authenticated
   const checkAuthStatus = useCallback(async () => {
     setIsLoading(true);
@@ -109,11 +138,14 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     try {
       const loginData = await usersAPI.login({ email, password });
+      
+      // Check if login was successful
       if (loginData && loginData.success !== false) {
         // Handle different response structures
         const accessToken = loginData?.data?.accessToken || loginData?.data?.token;
         const refreshToken = loginData?.data?.refreshToken;
         const userData = loginData?.user || loginData?.data?.user || loginData;
+        
         if (accessToken) {
           storeTokens(accessToken, refreshToken);
           setUser(userData);
@@ -124,24 +156,16 @@ export const AuthProvider = ({ children }) => {
           return { success: false, error: loginData.message || 'Login failed - no token received' };
         }
       } else {
+        // Login failed but we got a response
         return { success: false, error: loginData.message || 'Login failed' };
       }
     } catch (error) {
       console.error('Login error:', error);
+      console.log('Error response:', error?.response);
+      console.log('Error response data:', error?.response?.data);
       
-      // Extract error message from API response
-      let errorMessage = 'Network error. Please try again.';
-      if (error.message.includes('401')) {
-        errorMessage = 'Invalid email or password';
-      } else if (error.message.includes('403')) {
-        errorMessage = 'Account is blocked or inactive';
-      } else if (error.message.includes('400')) {
-        errorMessage = 'Please check your login credentials';
-      } else if (error.message.includes('404')) {
-        errorMessage = 'User not found';
-      } else if (error.message.includes('500')) {
-        errorMessage = 'Server error. Please try again later.';
-      }
+      // Extract the proper error message from API response
+      const errorMessage = extractApiErrorMessage(error);
       
       return { success: false, error: errorMessage };
     }
@@ -180,14 +204,19 @@ export const AuthProvider = ({ children }) => {
       
       // Extract error message from API response
       let errorMessage = 'Network error. Please try again.';
-      if (error.message.includes('409') || error.message.includes('conflict')) {
-        errorMessage = 'Email already exists';
-      } else if (error.message.includes('400')) {
-        errorMessage = 'Please check your registration details';
-      } else if (error.message.includes('422')) {
-        errorMessage = 'Invalid input data';
-      } else if (error.message.includes('500')) {
-        errorMessage = 'Server error. Please try again later.';
+      if (error?.message) {
+        errorMessage = error.message;
+      } else {
+        const status = error?.response?.status;
+        if (status === 409 || error.message.includes('conflict')) {
+          errorMessage = 'Email already exists';
+        } else if (status === 400 || error.message.includes('400')) {
+          errorMessage = 'Please check your registration details';
+        } else if (status === 422 || error.message.includes('422')) {
+          errorMessage = 'Invalid input data';
+        } else if (status >= 500 || error.message.includes('500')) {
+          errorMessage = 'Server error. Please try again later';
+        }
       }
       
       return { success: false, error: errorMessage };

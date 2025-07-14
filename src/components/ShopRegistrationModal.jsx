@@ -1,9 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { Loader2, AlertCircle } from 'lucide-react';
 import { shopsAPI } from '../services/api';
+import toast from 'react-hot-toast';
+import Swal from 'sweetalert2';
 
 const ShopRegistrationModal = ({ isOpen, onClose }) => {
   const [currentStep, setCurrentStep] = useState(1);
-  const [isSubmitting, setIsSubmitting] = useState(false); // Add loading state
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     // Step 1: Basic Information
     shopName: '',
@@ -25,9 +28,183 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
 
   const [errors, setErrors] = useState({});
 
+  // Clear errors when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setErrors({});
+      setCurrentStep(1);
+    }
+  }, [isOpen]);
+
+  // Close modal on Escape key press
+  useEffect(() => {
+    const handleEscape = (e) => {
+      if (e.key === 'Escape' && isOpen && !isSubmitting) {
+        handleClose();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('keydown', handleEscape);
+      document.body.style.overflow = 'hidden';
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen, isSubmitting]);
+
+  // Enhanced error handling for shop registration
+  const handleAPIError = async (error, context = 'general') => {
+    console.log('=== SHOP REGISTRATION ERROR HANDLING DEBUG ===');
+    console.log('Error object received:', error);
+    console.log('Error message:', error?.message);
+    console.log('Error response data:', error?.response?.data);
+    console.log('Context:', context);
+
+    const status = error?.response?.status;
+    const responseData = error?.response?.data;
+    const message = responseData?.message || error?.message;
+
+    // Handle shop registration specific errors
+    if (context === 'registration') {
+      // Handle structured API validation errors
+      if (responseData && !responseData.success && responseData.message === "Validation failed" && responseData.errors) {
+        console.log('Detected structured validation errors:', responseData.errors);
+        
+        const newErrors = {};
+        
+        // Process each validation error
+        responseData.errors.forEach(errorItem => {
+          const errorMessage = errorItem.message || '';
+          const errorMsg = errorMessage.toLowerCase();
+          
+          // Map API error messages to form fields
+          if (errorMsg.includes('gst')) {
+            newErrors.gstNumber = errorMessage;
+          } else if (errorMsg.includes('email')) {
+            newErrors.email = errorMessage;
+          } else if (errorMsg.includes('phone')) {
+            newErrors.phone = errorMessage;
+          } else if (errorMsg.includes('shop') || errorMsg.includes('store')) {
+            newErrors.shopName = errorMessage;
+          } else if (errorMsg.includes('address')) {
+            newErrors.storeAddress = errorMessage;
+          } else if (errorMsg.includes('location')) {
+            newErrors.location = errorMessage;
+          } else if (errorMsg.includes('district')) {
+            newErrors.district = errorMessage;
+          } else if (errorMsg.includes('taluk') || errorMsg.includes('block')) {
+            newErrors.talukBlock = errorMessage;
+          } else if (errorMsg.includes('category')) {
+            newErrors.category = errorMessage;
+          } else {
+            // If we can't map to a specific field, show as toast
+            toast.error(errorMessage, {
+              duration: 4000,
+              position: 'top-center',
+            });
+          }
+        });
+        
+        // Set field-specific errors
+        if (Object.keys(newErrors).length > 0) {
+          setErrors(newErrors);
+        }
+        
+        return;
+      }
+
+      // Check for duplicate shop registration
+      if (error?.message?.toLowerCase().includes('already exists') || 
+          error?.message?.toLowerCase().includes('duplicate') ||
+          status === 409) {
+        console.log('Detected duplicate shop error, showing SweetAlert');
+        await Swal.fire({
+          title: 'Shop Already Registered',
+          text: 'A shop with this email or details already exists in our system. Please contact support if you believe this is an error.',
+          icon: 'warning',
+          confirmButtonText: 'Contact Support',
+          confirmButtonColor: '#3085d6',
+          showCancelButton: true,
+          cancelButtonText: 'Try Different Email'
+        });
+        return;
+      }
+
+      // Check for general validation errors (fallback)
+      if (error?.message?.toLowerCase().includes('validation') || 
+          error?.message?.toLowerCase().includes('invalid') ||
+          status === 422) {
+        console.log('Detected general validation error, showing toast');
+        toast.error(error.message || 'Please check your information and try again.', {
+          duration: 4000,
+          position: 'top-center',
+        });
+        return;
+      }
+
+      // Check for rate limiting
+      if (error?.message?.toLowerCase().includes('too many') || 
+          error?.message?.toLowerCase().includes('rate limit') ||
+          status === 429) {
+        console.log('Detected rate limiting error, showing toast');
+        toast.error(error.message || 'Too many registration attempts. Please wait before trying again.', {
+          duration: 6000,
+          position: 'top-center',
+        });
+        return;
+      }
+
+      // Check for server errors
+      if (error?.message?.toLowerCase().includes('server error') || 
+          status >= 500) {
+        console.log('Detected server error, showing toast');
+        toast.error('Server error occurred. Please try again later or contact support.', {
+          duration: 5000,
+          position: 'top-center',
+        });
+        return;
+      }
+
+      // Network errors
+      if (error?.message?.toLowerCase().includes('network') || 
+          error?.message?.toLowerCase().includes('fetch') ||
+          !navigator.onLine) {
+        console.log('Detected network error, showing toast');
+        toast.error('Network error. Please check your internet connection and try again.', {
+          duration: 5000,
+          position: 'top-center',
+        });
+        return;
+      }
+    }
+
+    // Critical errors that need SweetAlert2
+    if (status === 403) {
+      await Swal.fire({
+        title: 'Registration Not Allowed',
+        text: 'Shop registration is currently not available in your area. Please contact support for more information.',
+        icon: 'error',
+        confirmButtonText: 'Contact Support',
+        confirmButtonColor: '#d33',
+      });
+      return;
+    }
+
+    // General fallback error
+    console.log('Showing fallback toast error');
+    toast.error(message || error?.message || 'Registration failed. Please try again.', {
+      duration: 4000,
+      position: 'top-center',
+    });
+  };
+
   const handleInputChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
-    // Clear error when user starts typing
+    
+    // Clear field-specific error when user starts typing
     if (errors[field]) {
       setErrors((prev) => ({ ...prev, [field]: '' }));
     }
@@ -37,31 +214,46 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
     const newErrors = {};
 
     if (step === 1) {
-      if (!formData.shopName.trim())
+      if (!formData.shopName.trim()) {
         newErrors.shopName = 'Store name is required';
-      if (!formData.category) newErrors.category = 'Category is required';
-      if (!formData.email.trim())
+      }
+      if (!formData.category) {
+        newErrors.category = 'Category is required';
+      }
+      if (!formData.email.trim()) {
         newErrors.email = 'Business email is required';
-      else if (!/\S+@\S+\.\S+/.test(formData.email))
-        newErrors.email = 'Email is invalid';
-      if (!formData.phone.trim()) newErrors.phone = 'Phone number is required';
+      } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+        newErrors.email = 'Please enter a valid email address';
+      }
+      if (!formData.phone.trim()) {
+        newErrors.phone = 'Phone number is required';
+      } else if (!/^\d{10,15}$/.test(formData.phone.replace(/\s/g, ''))) {
+        newErrors.phone = 'Please enter a valid phone number';
+      }
     }
 
     if (step === 2) {
-      if (!formData.district) newErrors.district = 'District is required';
-      if (!formData.talukBlock)
+      if (!formData.district) {
+        newErrors.district = 'District is required';
+      }
+      if (!formData.talukBlock) {
         newErrors.talukBlock = 'Taluk/Block is required';
-      if (!formData.location.trim())
+      }
+      if (!formData.location.trim()) {
         newErrors.location = 'Location is required';
+      }
     }
 
     if (step === 3) {
-      if (!formData.storeAddress.trim())
+      if (!formData.storeAddress.trim()) {
         newErrors.storeAddress = 'Store address is required';
-      if (!formData.gstNumber.trim())
+      }
+      if (!formData.gstNumber.trim()) {
         newErrors.gstNumber = 'GST number is required';
-      if (!formData.confirmDetails)
+      }
+      if (!formData.confirmDetails) {
         newErrors.confirmDetails = 'You must confirm the details';
+      }
     }
 
     setErrors(newErrors);
@@ -71,63 +263,193 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
   const nextStep = () => {
     if (validateStep(currentStep)) {
       if (currentStep < 3) setCurrentStep(currentStep + 1);
+    } else {
+      toast.error('Please fix the errors before proceeding', {
+        duration: 3000,
+        position: 'top-center',
+      });
     }
   };
 
   const handleSubmit = async () => {
-    if (validateStep(3)) {
-      setIsSubmitting(true); // Start loading
-      
-      try {
-        // Prepare the data to match your controller's expected fields
-        const registrationData = {
-          shopName: formData.shopName,
-          category: formData.category,
-          email: formData.email,
-          phone: formData.phone,
-          district: formData.district,
-          talukBlock: formData.talukBlock,
-          location: formData.location,
-          storeAddress: formData.storeAddress,
-          gstNumber: formData.gstNumber,
-          discountOffer: formData.discountOffer,
-          confirmDetails: formData.confirmDetails,
-        };
+    if (!validateStep(3)) {
+      toast.error('Please fix all errors before submitting', {
+        duration: 3000,
+        position: 'top-center',
+      });
+      return;
+    }
 
-        // Call the API
-        const response = await shopsAPI.registerShop(registrationData);
+    setIsSubmitting(true);
+    setErrors({});
 
-        if (response.success) {
-          // Show success message
-          alert(response.message || 'Shop registration submitted successfully! We will review your application and get back to you within 2-3 business days.');
+    // Show loading toast
+    const loadingToast = toast.loading('Submitting your shop registration...');
+
+    try {
+      // Prepare the data to match your controller's expected fields
+      const registrationData = {
+        shopName: formData.shopName,
+        category: formData.category,
+        email: formData.email,
+        phone: formData.phone,
+        district: formData.district,
+        talukBlock: formData.talukBlock,
+        location: formData.location,
+        storeAddress: formData.storeAddress,
+        gstNumber: formData.gstNumber,
+        discountOffer: formData.discountOffer,
+        confirmDetails: formData.confirmDetails,
+      };
+
+      // Call the API
+      const response = await shopsAPI.registerShop(registrationData);
+
+      if (response.success) {
+        toast.dismiss(loadingToast);
+        
+        // Show success SweetAlert2
+        await Swal.fire({
+          title: 'Registration Submitted Successfully!',
+          html: `
+            <div class="text-left">
+              <p class="mb-4">Thank you for registering <strong>${formData.shopName}</strong> with Pravasi Privilege!</p>
+              <div class="bg-blue-50 p-4 rounded-lg">
+                <p class="text-sm text-blue-800">
+                  <strong>What's Next?</strong><br>
+                  • Our team will review your application<br>
+                  • You'll receive a confirmation email within 24 hours<br>
+                  • Approval typically takes 2-3 business days<br>
+                  • Once approved, you'll receive partnership materials
+                </p>
+              </div>
+            </div>
+          `,
+          icon: 'success',
+          confirmButtonText: 'Great, Thanks!',
+          confirmButtonColor: '#059669',
+          allowOutsideClick: false,
+          width: '500px'
+        });
+
+        // Close modal and reset form
+        onClose();
+        resetForm();
+      } else {
+        toast.dismiss(loadingToast);
+        
+        // Handle API error response - Check for structured validation errors
+        console.log('API Error Response:', response);
+        
+        if (response.message === "Validation failed" && response.errors && Array.isArray(response.errors)) {
+          console.log('Processing structured validation errors:', response.errors);
           
-          // Close modal and reset form
-          onClose();
-          resetForm();
+          const newErrors = {};
+          
+          // Process each validation error
+          response.errors.forEach(errorItem => {
+            const errorMessage = errorItem.message || '';
+            const errorMsg = errorMessage.toLowerCase();
+            
+            console.log('Processing error:', errorMessage);
+            
+            // Map API error messages to form fields
+            if (errorMsg.includes('gst')) {
+              newErrors.gstNumber = errorMessage;
+            } else if (errorMsg.includes('email')) {
+              newErrors.email = errorMessage;
+            } else if (errorMsg.includes('phone')) {
+              newErrors.phone = errorMessage;
+            } else if (errorMsg.includes('shop') || errorMsg.includes('store')) {
+              newErrors.shopName = errorMessage;
+            } else if (errorMsg.includes('address')) {
+              newErrors.storeAddress = errorMessage;
+            } else if (errorMsg.includes('location')) {
+              newErrors.location = errorMessage;
+            } else if (errorMsg.includes('district')) {
+              newErrors.district = errorMessage;
+            } else if (errorMsg.includes('taluk') || errorMsg.includes('block')) {
+              newErrors.talukBlock = errorMessage;
+            } else if (errorMsg.includes('category')) {
+              newErrors.category = errorMessage;
+            } else {
+              // If we can't map to a specific field, show as toast
+              toast.error(errorMessage, {
+                duration: 4000,
+                position: 'top-center',
+              });
+            }
+          });
+          
+          // Set field-specific errors
+          if (Object.keys(newErrors).length > 0) {
+            console.log('Setting field errors:', newErrors);
+            setErrors(newErrors);
+          }
         } else {
-          // Handle API error response
-          alert(response.message || 'Registration failed. Please try again.');
+          // Fallback to generic API error handling
+          await handleAPIError({ message: response.message }, 'registration');
         }
-      } catch (error) {
-        console.error('Registration error:', error);
-        
-        // Handle different types of errors
-        let errorMessage = 'Registration failed. Please try again.';
-        
-        if (error.message.includes('400')) {
-          errorMessage = 'Please check your information and try again.';
-        } else if (error.message.includes('409') || error.message.includes('already exists')) {
-          errorMessage = 'A shop with this email already exists.';
-        } else if (error.message.includes('500')) {
-          errorMessage = 'Server error. Please try again later.';
-        } else if (error.message.includes('network') || error.message.includes('fetch')) {
-          errorMessage = 'Network error. Please check your connection and try again.';
-        }
-        
-        alert(errorMessage);
-      } finally {
-        setIsSubmitting(false); // Stop loading
       }
+    } catch (error) {
+      toast.dismiss(loadingToast);
+      console.error('Registration error:', error);
+      console.log('Error response:', error?.response?.data);
+      
+      // Handle structured validation errors from catch block
+      const responseData = error?.response?.data;
+      
+      if (responseData && responseData.message === "Validation failed" && responseData.errors && Array.isArray(responseData.errors)) {
+        console.log('Catch block - Processing structured validation errors:', responseData.errors);
+        
+        const newErrors = {};
+        
+        // Process each validation error
+        responseData.errors.forEach(errorItem => {
+          const errorMessage = errorItem.message || '';
+          const errorMsg = errorMessage.toLowerCase();
+          
+          console.log('Catch block - Processing error:', errorMessage);
+          
+          // Map API error messages to form fields
+          if (errorMsg.includes('gst')) {
+            newErrors.gstNumber = errorMessage;
+          } else if (errorMsg.includes('email')) {
+            newErrors.email = errorMessage;
+          } else if (errorMsg.includes('phone')) {
+            newErrors.phone = errorMessage;
+          } else if (errorMsg.includes('shop') || errorMsg.includes('store')) {
+            newErrors.shopName = errorMessage;
+          } else if (errorMsg.includes('address')) {
+            newErrors.storeAddress = errorMessage;
+          } else if (errorMsg.includes('location')) {
+            newErrors.location = errorMessage;
+          } else if (errorMsg.includes('district')) {
+            newErrors.district = errorMessage;
+          } else if (errorMsg.includes('taluk') || errorMsg.includes('block')) {
+            newErrors.talukBlock = errorMessage;
+          } else if (errorMsg.includes('category')) {
+            newErrors.category = errorMessage;
+          } else {
+            // If we can't map to a specific field, show as toast
+            toast.error(errorMessage, {
+              duration: 4000,
+              position: 'top-center',
+            });
+          }
+        });
+        
+        // Set field-specific errors
+        if (Object.keys(newErrors).length > 0) {
+          console.log('Catch block - Setting field errors:', newErrors);
+          setErrors(newErrors);
+        }
+      } else {
+        // Handle different types of errors with the enhanced error handler
+        await handleAPIError(error, 'registration');
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -150,7 +472,15 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
   };
 
   const handleClose = () => {
-    onClose();
+    if (!isSubmitting) {
+      onClose();
+    }
+  };
+
+  const handleBackdropClick = (e) => {
+    if (e.target === e.currentTarget && !isSubmitting) {
+      handleClose();
+    }
   };
 
   if (!isOpen) return null;
@@ -205,7 +535,10 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
   ];
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center z-[9999] p-4 font-figtree">
+    <div 
+      className="fixed inset-0 flex items-center justify-center z-[9999] p-4 font-figtree"
+      onClick={handleBackdropClick}
+    >
       <div className="bg-white rounded-2xl w-full max-w-3xl h-auto max-h-[90vh] overflow-y-auto shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between px-8 py-4">
@@ -237,16 +570,17 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
                     }
                     className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors text-base ${
                       errors.shopName
-                        ? 'border-red-300 bg-red-50'
+                        ? 'border-red-500 bg-red-50'
                         : 'border-gray-300'
-                    }`}
+                    } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
                     placeholder="Type your store name"
                     disabled={isSubmitting}
                   />
                   {errors.shopName && (
-                    <p className="mt-2 text-sm text-red-600">
-                      {errors.shopName}
-                    </p>
+                    <div className="flex items-center mt-2">
+                      <AlertCircle className="w-4 h-4 mr-1 text-red-500" />
+                      <p className="text-sm text-red-600">{errors.shopName}</p>
+                    </div>
                   )}
                 </div>
 
@@ -261,9 +595,9 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
                     }
                     className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors text-base ${
                       errors.category
-                        ? 'border-red-300 bg-red-50'
+                        ? 'border-red-500 bg-red-50'
                         : 'border-gray-300'
-                    }`}
+                    } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
                     disabled={isSubmitting}
                   >
                     <option value="">Select Category</option>
@@ -274,9 +608,10 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
                     ))}
                   </select>
                   {errors.category && (
-                    <p className="mt-2 text-sm text-red-600">
-                      {errors.category}
-                    </p>
+                    <div className="flex items-center mt-2">
+                      <AlertCircle className="w-4 h-4 mr-1 text-red-500" />
+                      <p className="text-sm text-red-600">{errors.category}</p>
+                    </div>
                   )}
                 </div>
 
@@ -290,14 +625,17 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
                     onChange={(e) => handleInputChange('email', e.target.value)}
                     className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors text-base ${
                       errors.email
-                        ? 'border-red-300 bg-red-50'
+                        ? 'border-red-500 bg-red-50'
                         : 'border-gray-300'
-                    }`}
+                    } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
                     placeholder="Type your email id"
                     disabled={isSubmitting}
                   />
                   {errors.email && (
-                    <p className="mt-2 text-sm text-red-600">{errors.email}</p>
+                    <div className="flex items-center mt-2">
+                      <AlertCircle className="w-4 h-4 mr-1 text-red-500" />
+                      <p className="text-sm text-red-600">{errors.email}</p>
+                    </div>
                   )}
                 </div>
 
@@ -311,14 +649,17 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
                     onChange={(e) => handleInputChange('phone', e.target.value)}
                     className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors text-base ${
                       errors.phone
-                        ? 'border-red-300 bg-red-50'
+                        ? 'border-red-500 bg-red-50'
                         : 'border-gray-300'
-                    }`}
+                    } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
                     placeholder="Type your phone number"
                     disabled={isSubmitting}
                   />
                   {errors.phone && (
-                    <p className="mt-2 text-sm text-red-600">{errors.phone}</p>
+                    <div className="flex items-center mt-2">
+                      <AlertCircle className="w-4 h-4 mr-1 text-red-500" />
+                      <p className="text-sm text-red-600">{errors.phone}</p>
+                    </div>
                   )}
                 </div>
               </div>
@@ -339,9 +680,9 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
                     }
                     className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors text-base ${
                       errors.district
-                        ? 'border-red-300 bg-red-50'
+                        ? 'border-red-500 bg-red-50'
                         : 'border-gray-300'
-                    }`}
+                    } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
                     disabled={isSubmitting}
                   >
                     <option value="">Select District</option>
@@ -352,9 +693,10 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
                     ))}
                   </select>
                   {errors.district && (
-                    <p className="mt-2 text-sm text-red-600">
-                      {errors.district}
-                    </p>
+                    <div className="flex items-center mt-2">
+                      <AlertCircle className="w-4 h-4 mr-1 text-red-500" />
+                      <p className="text-sm text-red-600">{errors.district}</p>
+                    </div>
                   )}
                 </div>
 
@@ -369,9 +711,9 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
                     }
                     className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors text-base ${
                       errors.talukBlock
-                        ? 'border-red-300 bg-red-50'
+                        ? 'border-red-500 bg-red-50'
                         : 'border-gray-300'
-                    }`}
+                    } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
                     disabled={isSubmitting}
                   >
                     <option value="">Select taluk</option>
@@ -382,9 +724,10 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
                     ))}
                   </select>
                   {errors.talukBlock && (
-                    <p className="mt-2 text-sm text-red-600">
-                      {errors.talukBlock}
-                    </p>
+                    <div className="flex items-center mt-2">
+                      <AlertCircle className="w-4 h-4 mr-1 text-red-500" />
+                      <p className="text-sm text-red-600">{errors.talukBlock}</p>
+                    </div>
                   )}
                 </div>
 
@@ -400,16 +743,17 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
                     }
                     className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors text-base ${
                       errors.location
-                        ? 'border-red-300 bg-red-50'
+                        ? 'border-red-500 bg-red-50'
                         : 'border-gray-300'
-                    }`}
+                    } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
                     placeholder="Type your location"
                     disabled={isSubmitting}
                   />
                   {errors.location && (
-                    <p className="mt-2 text-sm text-red-600">
-                      {errors.location}
-                    </p>
+                    <div className="flex items-center mt-2">
+                      <AlertCircle className="w-4 h-4 mr-1 text-red-500" />
+                      <p className="text-sm text-red-600">{errors.location}</p>
+                    </div>
                   )}
                 </div>
               </div>
@@ -431,16 +775,17 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
                     rows={3}
                     className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors text-base ${
                       errors.storeAddress
-                        ? 'border-red-300 bg-red-50'
+                        ? 'border-red-500 bg-red-50'
                         : 'border-gray-300'
-                    }`}
+                    } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
                     placeholder="Type your Store address"
                     disabled={isSubmitting}
                   />
                   {errors.storeAddress && (
-                    <p className="mt-2 text-sm text-red-600">
-                      {errors.storeAddress}
-                    </p>
+                    <div className="flex items-center mt-2">
+                      <AlertCircle className="w-4 h-4 mr-1 text-red-500" />
+                      <p className="text-sm text-red-600">{errors.storeAddress}</p>
+                    </div>
                   )}
                 </div>
 
@@ -456,16 +801,17 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
                     }
                     className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors text-base ${
                       errors.gstNumber
-                        ? 'border-red-300 bg-red-50'
+                        ? 'border-red-500 bg-red-50'
                         : 'border-gray-300'
-                    }`}
+                    } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
                     placeholder="Type your GST number"
                     disabled={isSubmitting}
                   />
                   {errors.gstNumber && (
-                    <p className="mt-2 text-sm text-red-600">
-                      {errors.gstNumber}
-                    </p>
+                    <div className="flex items-center mt-2">
+                      <AlertCircle className="w-4 h-4 mr-1 text-red-500" />
+                      <p className="text-sm text-red-600">{errors.gstNumber}</p>
+                    </div>
                   )}
                 </div>
 
@@ -479,7 +825,9 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
                     onChange={(e) =>
                       handleInputChange('discountOffer', e.target.value)
                     }
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors text-base"
+                    className={`w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors text-base ${
+                      isSubmitting ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
                     placeholder="20% OFF on total bill"
                     disabled={isSubmitting}
                   />
@@ -493,7 +841,9 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
                       onChange={(e) =>
                         handleInputChange('confirmDetails', e.target.checked)
                       }
-                      className="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      className={`mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500 ${
+                        isSubmitting ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
                       disabled={isSubmitting}
                     />
                     <span className="text-sm text-[#666666]">
@@ -502,9 +852,10 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
                     </span>
                   </label>
                   {errors.confirmDetails && (
-                    <p className="mt-2 text-sm text-red-600 ml-6">
-                      {errors.confirmDetails}
-                    </p>
+                    <div className="flex items-center mt-2 ml-6">
+                      <AlertCircle className="w-4 h-4 mr-1 text-red-500" />
+                      <p className="text-sm text-red-600">{errors.confirmDetails}</p>
+                    </div>
                   )}
                 </div>
               </div>
@@ -522,7 +873,9 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
             {currentStep < 3 ? (
               <button
                 onClick={nextStep}
-                className="w-full bg-[#AFDCFF] text-[#222158] py-3 px-6 rounded-lg font-semibold text-base transition-all shadow-md hover:shadow-lg"
+                className={`w-full bg-[#AFDCFF] text-[#222158] py-3 px-6 rounded-lg font-semibold text-base transition-all shadow-md hover:shadow-lg ${
+                  isSubmitting ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
                 disabled={isSubmitting}
               >
                 Next
@@ -531,13 +884,20 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
               <button
                 onClick={handleSubmit}
                 disabled={!formData.confirmDetails || isSubmitting}
-                className={`w-full py-3 px-6 rounded-lg font-semibold text-base transition-all shadow-md hover:shadow-lg ${
+                className={`w-full py-3 px-6 rounded-lg font-semibold text-base transition-all shadow-md hover:shadow-lg flex items-center justify-center ${
                   formData.confirmDetails && !isSubmitting
                     ? 'bg-[#AFDCFF] text-[#222158]'
                     : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                 }`}
               >
-                {isSubmitting ? 'Submitting...' : 'Submit'}
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="animate-spin mr-2" size={20} />
+                    Submitting...
+                  </>
+                ) : (
+                  'Submit'
+                )}
               </button>
             )}
           </div>
