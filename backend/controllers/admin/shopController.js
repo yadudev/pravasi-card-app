@@ -132,7 +132,8 @@ class ShopController {
    */
   static async createShopByAdmin(req, res) {
     try {
-      const adminId = req.user?.id;
+      const adminId = req.admin?.id;
+      console.log('rr', req.user?.id);
       if (!adminId) {
         return res
           .status(401)

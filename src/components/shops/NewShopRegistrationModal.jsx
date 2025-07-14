@@ -19,6 +19,8 @@ const NewShopRegistrationModal = ({ isOpen, onClose, onSuccess }) => {
     // Address Information
     address: '',
     location: '',
+    latitude: '',
+    longitude: '',
     
     // Business Information
     discountOffered: 0,
@@ -77,6 +79,14 @@ const NewShopRegistrationModal = ({ isOpen, onClose, onSuccess }) => {
       case 2: // Address & Category
         if (!formData.address.trim()) newErrors.address = 'Address is required';
         if (!formData.category) newErrors.category = 'Category is required';
+        
+        // Validate latitude and longitude if provided (optional fields)
+        if (formData.latitude && (isNaN(formData.latitude) || formData.latitude < -90 || formData.latitude > 90)) {
+          newErrors.latitude = 'Latitude must be between -90 and 90';
+        }
+        if (formData.longitude && (isNaN(formData.longitude) || formData.longitude < -180 || formData.longitude > 180)) {
+          newErrors.longitude = 'Longitude must be between -180 and 180';
+        }
         break;
         
       case 3: // Business Information
@@ -125,6 +135,8 @@ const NewShopRegistrationModal = ({ isOpen, onClose, onSuccess }) => {
       const payload = {
         ...shopData,
         discountOffered: parseFloat(formData.discountOffered) || 0,
+        latitude: formData.latitude ? parseFloat(formData.latitude) : null,
+        longitude: formData.longitude ? parseFloat(formData.longitude) : null,
         status: 'pending', // Default status for new registrations
         isActive: true,
         totalPurchases: 0,
@@ -148,8 +160,8 @@ const NewShopRegistrationModal = ({ isOpen, onClose, onSuccess }) => {
   const resetForm = () => {
     setFormData({
       name: '', description: '', category: '', ownerName: '', email: '',
-      phone: '', address: '', location: '', discountOffered: 0,
-      registrationNumber: '', gstNumber: '', panNumber: '',
+      phone: '', address: '', location: '', latitude: '', longitude: '',
+      discountOffered: 0, registrationNumber: '', gstNumber: '', panNumber: '',
       bankAccountNumber: '', ifscCode: '', password: '', confirmPassword: ''
     });
     setErrors({});
@@ -292,6 +304,45 @@ const NewShopRegistrationModal = ({ isOpen, onClose, onSuccess }) => {
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             placeholder="Enter nearby landmark or location"
           />
+        </div>
+
+        {/* Latitude and Longitude Fields */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Latitude (Optional)
+            </label>
+            <input
+              type="number"
+              step="any"
+              value={formData.latitude}
+              onChange={(e) => handleInputChange('latitude', e.target.value)}
+              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                errors.latitude ? 'border-red-500' : 'border-gray-300'
+              }`}
+              placeholder="e.g., 12.9716"
+            />
+            {errors.latitude && <p className="text-red-500 text-sm mt-1">{errors.latitude}</p>}
+            <p className="text-xs text-gray-500 mt-1">Range: -90 to 90</p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Longitude (Optional)
+            </label>
+            <input
+              type="number"
+              step="any"
+              value={formData.longitude}
+              onChange={(e) => handleInputChange('longitude', e.target.value)}
+              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                errors.longitude ? 'border-red-500' : 'border-gray-300'
+              }`}
+              placeholder="e.g., 77.5946"
+            />
+            {errors.longitude && <p className="text-red-500 text-sm mt-1">{errors.longitude}</p>}
+            <p className="text-xs text-gray-500 mt-1">Range: -180 to 180</p>
+          </div>
         </div>
 
         <div>

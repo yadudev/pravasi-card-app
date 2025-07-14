@@ -266,7 +266,7 @@ const SearchResultsPage = ({ onShopClick }) => {
           shop.images?.featured ||
           'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=300&h=200&fit=crop',
         position: finalPosition,
-        discount: `${shop.discount?.percentage || 10}%`,
+        discount: `${parseFloat(shop.discount?.percentage || 10).toFixed(0)}% `,
         description: shop.description || 'No description available',
         timing: shop.openingHours
           ? formatOpeningHours(shop.openingHours)
