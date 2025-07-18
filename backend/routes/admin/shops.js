@@ -32,28 +32,6 @@ router.post(
       .isLength({ max: 1000 })
       .withMessage('Description must not exceed 1000 characters')
       .trim(),
-    body('registrationNumber')
-      .optional()
-      .isString()
-      .withMessage('Registration number must be a string')
-      .trim(),
-    body('gstNumber')
-      .optional()
-      .matches(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/)
-      .withMessage('Please provide a valid GST number'),
-    body('bankAccountNumber')
-      .optional()
-      .isString()
-      .withMessage('Bank account number must be a string')
-      .trim(),
-    body('ifscCode')
-      .optional()
-      .matches(/^[A-Z]{4}0[A-Z0-9]{6}$/)
-      .withMessage('Please provide a valid IFSC code'),
-    body('panNumber')
-      .optional()
-      .matches(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/)
-      .withMessage('Please provide a valid PAN number'),
     ValidationMiddleware.validate,
   ],
   ShopController.registerShop
@@ -88,12 +66,7 @@ router.get(
     query('city').optional().isString().withMessage('City must be a string'),
     query('sortBy')
       .optional()
-      .isIn([
-        'name',
-        'ownerName',
-        'totalRevenue',
-        'totalPurchases',
-      ])
+      .isIn(['name', 'ownerName', 'totalRevenue', 'totalPurchases'])
       .withMessage('Invalid sort field'),
     query('sortOrder')
       .optional()

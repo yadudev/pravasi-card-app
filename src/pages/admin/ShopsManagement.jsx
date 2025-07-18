@@ -69,7 +69,6 @@ const ShopsManagement = () => {
       };
 
       const response = await shopsAPI.getAllShops(params);
-      console.log({ response });
       setShops(response.data.shops);
       setTotalPages(response.data.pagination.totalPages);
       setTotalShops(response.data.pagination.totalItems);
