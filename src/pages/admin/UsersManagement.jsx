@@ -164,7 +164,6 @@ const UsersManagement = () => {
     });
     setShowCardModal(true);
   };
-console.log({userForm})
   // Form submissions
   const handleUserSubmit = async (e) => {
     e.preventDefault();

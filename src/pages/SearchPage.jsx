@@ -467,7 +467,6 @@ const SearchPage = () => {
         type: 'card_activation',
         name: userData.fullName,
       });
-      console.log({ response });
       if (response.success) {
         setOtpSessionId(response.data?.sessionId);
         setIsOTPModalOpen(true);

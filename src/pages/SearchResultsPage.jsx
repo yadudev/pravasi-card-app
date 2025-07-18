@@ -79,10 +79,6 @@ const SearchResultsPage = ({ onShopClick }) => {
   // Update map center when shops are loaded or search location changes
   useEffect(() => {
     const setMapCenterBasedOnData = async () => {
-      console.log('=== MAP CENTER UPDATE ===');
-      console.log('Shops:', shops.length);
-      console.log('Selected Location:', selectedLocation);
-
       // Priority 1: If we have shops with real coordinates, use the first one
       const shopsWithRealCoords = shops.filter(
         (shop) => shop.hasRealCoordinates
@@ -221,10 +217,6 @@ const SearchResultsPage = ({ onShopClick }) => {
       return [];
     }
 
-    console.log('=== TRANSFORMING SHOP DATA ===');
-    console.log('API Response data length:', apiResponse.data.length);
-    console.log('Selected location for defaults:', selectedLocation);
-
     // Get default coordinates based on search location
     const getDefaultCoordinates = () => {
       return getLocationDefaults(selectedLocation); // This now always returns valid coordinates
@@ -246,13 +238,6 @@ const SearchResultsPage = ({ onShopClick }) => {
         shop.location?.coordinates?.latitude || defaultCoords[0],
         shop.location?.coordinates?.longitude || defaultCoords[1],
       ]);
-
-      console.log(`Shop "${shop.name}":`, {
-        hasRealCoordinates,
-        originalLat: shop.location?.coordinates?.latitude,
-        originalLng: shop.location?.coordinates?.longitude,
-        finalPosition,
-      });
 
       return {
         id: shop.id,
@@ -313,11 +298,6 @@ const SearchResultsPage = ({ onShopClick }) => {
       // Try to get search results from sessionStorage first (unless forcing refresh)
       const storedResults = sessionStorage.getItem('searchResults');
       const storedParams = sessionStorage.getItem('searchParams');
-
-      console.log('=== LOADING SEARCH RESULTS ===');
-      console.log('Force refresh:', forceRefresh);
-      console.log('Stored results available:', !!storedResults);
-      console.log('Stored params available:', !!storedParams);
 
       if (storedResults && storedParams && !forceRefresh) {
         const searchResults = JSON.parse(storedResults);

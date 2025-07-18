@@ -320,7 +320,7 @@ const Header = ({ onNavigate }) => {
       console.error('Failed to parse user data from localStorage:', error);
     }
   }, []);
-  console.log({ isSuccessModalOpen });
+
   return (
     <>
       <header className="bg-white shadow-sm sticky top-0 z-50">

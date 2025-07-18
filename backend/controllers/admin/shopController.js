@@ -32,8 +32,7 @@ class ShopController {
         !district ||
         !talukBlock ||
         !location ||
-        !storeAddress ||
-        !gstNumber
+        !storeAddress
       ) {
         return res.status(400).json({
           success: false,
@@ -133,7 +132,6 @@ class ShopController {
   static async createShopByAdmin(req, res) {
     try {
       const adminId = req.admin?.id;
-      console.log('rr', req.user?.id);
       if (!adminId) {
         return res
           .status(401)

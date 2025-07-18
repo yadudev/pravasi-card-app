@@ -243,7 +243,6 @@ const ActivateModal = ({
     const loadingToast = toast.loading('Creating your profile...');
 
     try {
-      console.log({ formData }, 'form data active modal');
       
       // Try using AuthContext createProfile first, then fallback to direct API
       let result;
@@ -255,8 +254,6 @@ const ActivateModal = ({
         // Fallback to direct API call
         result = await usersAPI.createProfile(formData);
       }
-
-      console.log({ result });
 
       if (result.success) {
         toast.dismiss(loadingToast);

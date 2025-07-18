@@ -84,7 +84,6 @@ const ManageCardsModal = ({ isOpen, onClose, user, onOpenOTPModal }) => {
         type: 'card_activation',
         name: user.name,
       });
-      console.log({ response });
       if (response.success) {
         // Check if onOpenOTPModal function is provided
         if (onOpenOTPModal && typeof onOpenOTPModal === 'function') {

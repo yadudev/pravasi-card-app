@@ -57,12 +57,6 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
 
   // Enhanced error handling for shop registration
   const handleAPIError = async (error, context = 'general') => {
-    console.log('=== SHOP REGISTRATION ERROR HANDLING DEBUG ===');
-    console.log('Error object received:', error);
-    console.log('Error message:', error?.message);
-    console.log('Error response data:', error?.response?.data);
-    console.log('Context:', context);
-
     const status = error?.response?.status;
     const responseData = error?.response?.data;
     const message = responseData?.message || error?.message;
@@ -70,16 +64,24 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
     // Handle shop registration specific errors
     if (context === 'registration') {
       // Handle structured API validation errors
-      if (responseData && !responseData.success && responseData.message === "Validation failed" && responseData.errors) {
-        console.log('Detected structured validation errors:', responseData.errors);
-        
+      if (
+        responseData &&
+        !responseData.success &&
+        responseData.message === 'Validation failed' &&
+        responseData.errors
+      ) {
+        console.log(
+          'Detected structured validation errors:',
+          responseData.errors
+        );
+
         const newErrors = {};
-        
+
         // Process each validation error
-        responseData.errors.forEach(errorItem => {
+        responseData.errors.forEach((errorItem) => {
           const errorMessage = errorItem.message || '';
           const errorMsg = errorMessage.toLowerCase();
-          
+
           // Map API error messages to form fields
           if (errorMsg.includes('gst')) {
             newErrors.gstNumber = errorMessage;
@@ -107,19 +109,21 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
             });
           }
         });
-        
+
         // Set field-specific errors
         if (Object.keys(newErrors).length > 0) {
           setErrors(newErrors);
         }
-        
+
         return;
       }
 
       // Check for duplicate shop registration
-      if (error?.message?.toLowerCase().includes('already exists') || 
-          error?.message?.toLowerCase().includes('duplicate') ||
-          status === 409) {
+      if (
+        error?.message?.toLowerCase().includes('already exists') ||
+        error?.message?.toLowerCase().includes('duplicate') ||
+        status === 409
+      ) {
         console.log('Detected duplicate shop error, showing SweetAlert');
         await Swal.fire({
           title: 'Shop Already Registered',
@@ -128,55 +132,76 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
           confirmButtonText: 'Contact Support',
           confirmButtonColor: '#3085d6',
           showCancelButton: true,
-          cancelButtonText: 'Try Different Email'
+          cancelButtonText: 'Try Different Email',
         });
         return;
       }
 
       // Check for general validation errors (fallback)
-      if (error?.message?.toLowerCase().includes('validation') || 
-          error?.message?.toLowerCase().includes('invalid') ||
-          status === 422) {
+      if (
+        error?.message?.toLowerCase().includes('validation') ||
+        error?.message?.toLowerCase().includes('invalid') ||
+        status === 422
+      ) {
         console.log('Detected general validation error, showing toast');
-        toast.error(error.message || 'Please check your information and try again.', {
-          duration: 4000,
-          position: 'top-center',
-        });
+        toast.error(
+          error.message || 'Please check your information and try again.',
+          {
+            duration: 4000,
+            position: 'top-center',
+          }
+        );
         return;
       }
 
       // Check for rate limiting
-      if (error?.message?.toLowerCase().includes('too many') || 
-          error?.message?.toLowerCase().includes('rate limit') ||
-          status === 429) {
+      if (
+        error?.message?.toLowerCase().includes('too many') ||
+        error?.message?.toLowerCase().includes('rate limit') ||
+        status === 429
+      ) {
         console.log('Detected rate limiting error, showing toast');
-        toast.error(error.message || 'Too many registration attempts. Please wait before trying again.', {
-          duration: 6000,
-          position: 'top-center',
-        });
+        toast.error(
+          error.message ||
+            'Too many registration attempts. Please wait before trying again.',
+          {
+            duration: 6000,
+            position: 'top-center',
+          }
+        );
         return;
       }
 
       // Check for server errors
-      if (error?.message?.toLowerCase().includes('server error') || 
-          status >= 500) {
+      if (
+        error?.message?.toLowerCase().includes('server error') ||
+        status >= 500
+      ) {
         console.log('Detected server error, showing toast');
-        toast.error('Server error occurred. Please try again later or contact support.', {
-          duration: 5000,
-          position: 'top-center',
-        });
+        toast.error(
+          'Server error occurred. Please try again later or contact support.',
+          {
+            duration: 5000,
+            position: 'top-center',
+          }
+        );
         return;
       }
 
       // Network errors
-      if (error?.message?.toLowerCase().includes('network') || 
-          error?.message?.toLowerCase().includes('fetch') ||
-          !navigator.onLine) {
+      if (
+        error?.message?.toLowerCase().includes('network') ||
+        error?.message?.toLowerCase().includes('fetch') ||
+        !navigator.onLine
+      ) {
         console.log('Detected network error, showing toast');
-        toast.error('Network error. Please check your internet connection and try again.', {
-          duration: 5000,
-          position: 'top-center',
-        });
+        toast.error(
+          'Network error. Please check your internet connection and try again.',
+          {
+            duration: 5000,
+            position: 'top-center',
+          }
+        );
         return;
       }
     }
@@ -195,15 +220,18 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
 
     // General fallback error
     console.log('Showing fallback toast error');
-    toast.error(message || error?.message || 'Registration failed. Please try again.', {
-      duration: 4000,
-      position: 'top-center',
-    });
+    toast.error(
+      message || error?.message || 'Registration failed. Please try again.',
+      {
+        duration: 4000,
+        position: 'top-center',
+      }
+    );
   };
 
   const handleInputChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
-    
+
     // Clear field-specific error when user starts typing
     if (errors[field]) {
       setErrors((prev) => ({ ...prev, [field]: '' }));
@@ -248,9 +276,7 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
       if (!formData.storeAddress.trim()) {
         newErrors.storeAddress = 'Store address is required';
       }
-      if (!formData.gstNumber.trim()) {
-        newErrors.gstNumber = 'GST number is required';
-      }
+      // GST Number is now optional - no validation required
       if (!formData.confirmDetails) {
         newErrors.confirmDetails = 'You must confirm the details';
       }
@@ -307,11 +333,19 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
 
       if (response.success) {
         toast.dismiss(loadingToast);
-        
-        // Show success SweetAlert2
-        await Swal.fire({
-          title: 'Registration Submitted Successfully!',
-          html: `
+
+        // Set submitting to false BEFORE closing modal
+        setIsSubmitting(false);
+
+        // Close modal and reset form first
+        onClose();
+        resetForm();
+
+        // Then show success SweetAlert2 after a small delay to ensure modal is closed
+        setTimeout(async () => {
+          await Swal.fire({
+            title: 'Registration Submitted Successfully!',
+            html: `
             <div class="text-left">
               <p class="mb-4">Thank you for registering <strong>${formData.shopName}</strong> with Pravasi Privilege!</p>
               <div class="bg-blue-50 p-4 rounded-lg">
@@ -325,34 +359,40 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
               </div>
             </div>
           `,
-          icon: 'success',
-          confirmButtonText: 'Great, Thanks!',
-          confirmButtonColor: '#059669',
-          allowOutsideClick: false,
-          width: '500px'
-        });
+            icon: 'success',
+            confirmButtonText: 'Great, Thanks!',
+            confirmButtonColor: '#059669',
+            allowOutsideClick: false,
+            width: '500px',
+          });
+        }, 100);
 
-        // Close modal and reset form
-        onClose();
-        resetForm();
+        return; // Early return to avoid the finally block
       } else {
         toast.dismiss(loadingToast);
-        
+
         // Handle API error response - Check for structured validation errors
         console.log('API Error Response:', response);
-        
-        if (response.message === "Validation failed" && response.errors && Array.isArray(response.errors)) {
-          console.log('Processing structured validation errors:', response.errors);
-          
+
+        if (
+          response.message === 'Validation failed' &&
+          response.errors &&
+          Array.isArray(response.errors)
+        ) {
+          console.log(
+            'Processing structured validation errors:',
+            response.errors
+          );
+
           const newErrors = {};
-          
+
           // Process each validation error
-          response.errors.forEach(errorItem => {
+          response.errors.forEach((errorItem) => {
             const errorMessage = errorItem.message || '';
             const errorMsg = errorMessage.toLowerCase();
-            
+
             console.log('Processing error:', errorMessage);
-            
+
             // Map API error messages to form fields
             if (errorMsg.includes('gst')) {
               newErrors.gstNumber = errorMessage;
@@ -360,7 +400,10 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
               newErrors.email = errorMessage;
             } else if (errorMsg.includes('phone')) {
               newErrors.phone = errorMessage;
-            } else if (errorMsg.includes('shop') || errorMsg.includes('store')) {
+            } else if (
+              errorMsg.includes('shop') ||
+              errorMsg.includes('store')
+            ) {
               newErrors.shopName = errorMessage;
             } else if (errorMsg.includes('address')) {
               newErrors.storeAddress = errorMessage;
@@ -368,7 +411,10 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
               newErrors.location = errorMessage;
             } else if (errorMsg.includes('district')) {
               newErrors.district = errorMessage;
-            } else if (errorMsg.includes('taluk') || errorMsg.includes('block')) {
+            } else if (
+              errorMsg.includes('taluk') ||
+              errorMsg.includes('block')
+            ) {
               newErrors.talukBlock = errorMessage;
             } else if (errorMsg.includes('category')) {
               newErrors.category = errorMessage;
@@ -380,7 +426,7 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
               });
             }
           });
-          
+
           // Set field-specific errors
           if (Object.keys(newErrors).length > 0) {
             console.log('Setting field errors:', newErrors);
@@ -395,22 +441,30 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
       toast.dismiss(loadingToast);
       console.error('Registration error:', error);
       console.log('Error response:', error?.response?.data);
-      
+
       // Handle structured validation errors from catch block
       const responseData = error?.response?.data;
-      
-      if (responseData && responseData.message === "Validation failed" && responseData.errors && Array.isArray(responseData.errors)) {
-        console.log('Catch block - Processing structured validation errors:', responseData.errors);
-        
+
+      if (
+        responseData &&
+        responseData.message === 'Validation failed' &&
+        responseData.errors &&
+        Array.isArray(responseData.errors)
+      ) {
+        console.log(
+          'Catch block - Processing structured validation errors:',
+          responseData.errors
+        );
+
         const newErrors = {};
-        
+
         // Process each validation error
-        responseData.errors.forEach(errorItem => {
+        responseData.errors.forEach((errorItem) => {
           const errorMessage = errorItem.message || '';
           const errorMsg = errorMessage.toLowerCase();
-          
+
           console.log('Catch block - Processing error:', errorMessage);
-          
+
           // Map API error messages to form fields
           if (errorMsg.includes('gst')) {
             newErrors.gstNumber = errorMessage;
@@ -438,7 +492,7 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
             });
           }
         });
-        
+
         // Set field-specific errors
         if (Object.keys(newErrors).length > 0) {
           console.log('Catch block - Setting field errors:', newErrors);
@@ -449,6 +503,7 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
         await handleAPIError(error, 'registration');
       }
     } finally {
+      // Only set submitting to false if we didn't already do it in the success path
       setIsSubmitting(false);
     }
   };
@@ -535,7 +590,7 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
   ];
 
   return (
-    <div 
+    <div
       className="fixed inset-0 flex items-center justify-center z-[9999] p-4 font-figtree"
       onClick={handleBackdropClick}
     >
@@ -726,7 +781,9 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
                   {errors.talukBlock && (
                     <div className="flex items-center mt-2">
                       <AlertCircle className="w-4 h-4 mr-1 text-red-500" />
-                      <p className="text-sm text-red-600">{errors.talukBlock}</p>
+                      <p className="text-sm text-red-600">
+                        {errors.talukBlock}
+                      </p>
                     </div>
                   )}
                 </div>
@@ -784,14 +841,16 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
                   {errors.storeAddress && (
                     <div className="flex items-center mt-2">
                       <AlertCircle className="w-4 h-4 mr-1 text-red-500" />
-                      <p className="text-sm text-red-600">{errors.storeAddress}</p>
+                      <p className="text-sm text-red-600">
+                        {errors.storeAddress}
+                      </p>
                     </div>
                   )}
                 </div>
 
                 <div>
                   <label className="block text-base font-semibold text-[#666666] mb-3">
-                    GST Number*
+                    GST Number
                   </label>
                   <input
                     type="text"
@@ -813,6 +872,10 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
                       <p className="text-sm text-red-600">{errors.gstNumber}</p>
                     </div>
                   )}
+                  <p className="text-xs text-gray-500 mt-1">
+                    You can provide your GST number if you have one. This helps
+                    us better categorize your business.
+                  </p>
                 </div>
 
                 <div>
@@ -820,7 +883,7 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
                     Discount Offer You'd Like to Provide
                   </label>
                   <input
-                    type="text"
+                    type="number"
                     value={formData.discountOffer}
                     onChange={(e) =>
                       handleInputChange('discountOffer', e.target.value)
@@ -854,7 +917,9 @@ const ShopRegistrationModal = ({ isOpen, onClose }) => {
                   {errors.confirmDetails && (
                     <div className="flex items-center mt-2 ml-6">
                       <AlertCircle className="w-4 h-4 mr-1 text-red-500" />
-                      <p className="text-sm text-red-600">{errors.confirmDetails}</p>
+                      <p className="text-sm text-red-600">
+                        {errors.confirmDetails}
+                      </p>
                     </div>
                   )}
                 </div>

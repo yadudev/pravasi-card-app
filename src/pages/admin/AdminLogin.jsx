@@ -163,7 +163,6 @@ const AdminLogin = () => {
         rememberMe: formData.rememberMe
       });
 
-      console.log({response})
       if (response.success) {
         // Store token
         localStorage.setItem('adminToken', response?.data?.token);
