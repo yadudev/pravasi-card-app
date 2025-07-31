@@ -20,8 +20,6 @@ const ShopEditModal = ({ isOpen, shop, onClose, onSave }) => {
     registrationNumber: '',
     gstNumber: '',
     panNumber: '',
-    bankAccountNumber: '',
-    ifscCode: '',
     isActive: true
   });
 
@@ -61,8 +59,6 @@ const ShopEditModal = ({ isOpen, shop, onClose, onSave }) => {
         registrationNumber: shop.registrationNumber || '',
         gstNumber: shop.gstNumber || '',
         panNumber: shop.panNumber || '',
-        bankAccountNumber: shop.bankAccountNumber || '',
-        ifscCode: shop.ifscCode || '',
         isActive: shop.isActive !== undefined ? shop.isActive : true
       };
       setFormData(initialData);
@@ -90,8 +86,6 @@ const ShopEditModal = ({ isOpen, shop, onClose, onSave }) => {
         registrationNumber: shop.registrationNumber || '',
         gstNumber: shop.gstNumber || '',
         panNumber: shop.panNumber || '',
-        bankAccountNumber: shop.bankAccountNumber || '',
-        ifscCode: shop.ifscCode || '',
         isActive: shop.isActive !== undefined ? shop.isActive : true
       }));
       return newData;
@@ -159,10 +153,6 @@ const ShopEditModal = ({ isOpen, shop, onClose, onSave }) => {
 
     if (formData.panNumber && !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(formData.panNumber)) {
       newErrors.panNumber = 'Please provide a valid PAN number';
-    }
-
-    if (formData.ifscCode && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(formData.ifscCode)) {
-      newErrors.ifscCode = 'Please provide a valid IFSC code';
     }
 
     if (formData.description && formData.description.length > 1000) {
@@ -520,40 +510,12 @@ const ShopEditModal = ({ isOpen, shop, onClose, onSave }) => {
           </div>
         </div>
 
-        {/* Bank Details */}
-        <div className="space-y-4">
-          <h4 className="font-medium text-gray-800">Bank Details</h4>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Bank Account Number
-              </label>
-              <input
-                type="text"
-                value={formData.bankAccountNumber}
-                onChange={(e) => handleInputChange('bankAccountNumber', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                placeholder="Enter bank account number"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                IFSC Code
-              </label>
-              <input
-                type="text"
-                value={formData.ifscCode}
-                onChange={(e) => handleInputChange('ifscCode', e.target.value.toUpperCase())}
-                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
-                  errors.ifscCode ? 'border-red-500' : 'border-gray-300'
-                }`}
-                placeholder="SBIN0000123"
-              />
-              {errors.ifscCode && <p className="text-red-500 text-sm mt-1">{errors.ifscCode}</p>}
-            </div>
-          </div>
+        {/* Note about removed bank details */}
+        <div className="bg-blue-50 p-4 rounded-lg">
+          <h4 className="font-medium text-blue-900 mb-2">Note</h4>
+          <p className="text-sm text-blue-700">
+            Bank details are managed separately for security purposes. Contact administrator if bank information needs to be updated.
+          </p>
         </div>
       </div>
     </div>
