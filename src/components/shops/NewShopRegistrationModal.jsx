@@ -27,8 +27,6 @@ const NewShopRegistrationModal = ({ isOpen, onClose, onSuccess }) => {
     registrationNumber: '',
     gstNumber: '',
     panNumber: '',
-    bankAccountNumber: '',
-    ifscCode: '',
 
     // Additional fields not in model (will be processed separately)
     password: '',
@@ -143,12 +141,6 @@ const NewShopRegistrationModal = ({ isOpen, onClose, onSuccess }) => {
         ) {
           newErrors.panNumber = 'Invalid PAN number format';
         }
-        if (
-          formData.ifscCode &&
-          !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(formData.ifscCode)
-        ) {
-          newErrors.ifscCode = 'Invalid IFSC code format';
-        }
         // Password validation only if password is provided
         if (formData.password && formData.password.length < 6) {
           newErrors.password = 'Password must be at least 6 characters';
@@ -192,11 +184,6 @@ const NewShopRegistrationModal = ({ isOpen, onClose, onSuccess }) => {
       { keywords: ['registration number'], field: 'registrationNumber' },
       { keywords: ['gst', 'gst number'], field: 'gstNumber' },
       { keywords: ['pan', 'pan number'], field: 'panNumber' },
-      {
-        keywords: ['bank account', 'account number'],
-        field: 'bankAccountNumber',
-      },
-      { keywords: ['ifsc', 'ifsc code'], field: 'ifscCode' },
       { keywords: ['password'], field: 'password' },
     ];
 
@@ -225,8 +212,6 @@ const NewShopRegistrationModal = ({ isOpen, onClose, onSuccess }) => {
       'registrationNumber',
       'gstNumber',
       'panNumber',
-      'bankAccountNumber',
-      'ifscCode',
       'password',
       'confirmPassword',
     ];
@@ -297,8 +282,17 @@ const NewShopRegistrationModal = ({ isOpen, onClose, onSuccess }) => {
   };
 
   const handleNext = () => {
+    console.log('HandleNext called on step:', currentStep); // Debug log
+    
     if (validateStep(currentStep)) {
-      setCurrentStep((prev) => prev + 1);
+      console.log('Validation passed, moving to next step'); // Debug log
+      setCurrentStep((prev) => {
+        const nextStep = prev + 1;
+        console.log('Moving from step', prev, 'to step', nextStep); // Debug log
+        return nextStep;
+      });
+    } else {
+      console.log('Validation failed for step:', currentStep); // Debug log
     }
   };
 
@@ -306,12 +300,34 @@ const NewShopRegistrationModal = ({ isOpen, onClose, onSuccess }) => {
     setCurrentStep((prev) => prev - 1);
   };
 
+  // Separate handler for the Next button to avoid form submission
+  const handleNextClick = (e) => {
+    e.preventDefault(); // Prevent form submission
+    e.stopPropagation(); // Stop event bubbling
+    handleNext();
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    console.log('Form submitted on step:', currentStep); // Debug log
 
-    if (!validateStep(3)) return;
+    // Only proceed with actual submission if we're on the final step
+    if (currentStep !== 3) {
+      console.log('Not on final step, calling handleNext'); // Debug log
+      handleNext();
+      return;
+    }
 
+    // Final validation before submission
+    if (!validateStep(3)) {
+      console.log('Step 3 validation failed'); // Debug log
+      return;
+    }
+
+    console.log('Starting actual form submission'); // Debug log
     setLoading(true);
+    
     // Clear any previous errors
     setErrors({});
     setGeneralError('');
@@ -325,6 +341,9 @@ const NewShopRegistrationModal = ({ isOpen, onClose, onSuccess }) => {
         discountOffered: parseFloat(formData.discountOffered) || 0,
         latitude: formData.latitude ? parseFloat(formData.latitude) : null,
         longitude: formData.longitude ? parseFloat(formData.longitude) : null,
+        // Send default values for removed bank fields
+        bankAccountNumber: '',
+        ifscCode: '',
         status: 'pending', // Default status for new registrations
         isActive: true,
         totalPurchases: 0,
@@ -365,8 +384,6 @@ const NewShopRegistrationModal = ({ isOpen, onClose, onSuccess }) => {
       registrationNumber: '',
       gstNumber: '',
       panNumber: '',
-      bankAccountNumber: '',
-      ifscCode: '',
       password: '',
       confirmPassword: '',
     });
@@ -757,57 +774,6 @@ const NewShopRegistrationModal = ({ isOpen, onClose, onSuccess }) => {
           </div>
         </div>
 
-        {/* Bank Details */}
-        <div className="space-y-4">
-          <h4 className="font-medium text-gray-800">Bank Details (Optional)</h4>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Bank Account Number
-              </label>
-              <input
-                type="text"
-                value={formData.bankAccountNumber}
-                onChange={(e) =>
-                  handleInputChange('bankAccountNumber', e.target.value)
-                }
-                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
-                  errors.bankAccountNumber
-                    ? 'border-red-500'
-                    : 'border-gray-300'
-                }`}
-                placeholder="Enter bank account number"
-              />
-              {errors.bankAccountNumber && (
-                <p className="text-red-500 text-sm mt-1">
-                  {errors.bankAccountNumber}
-                </p>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                IFSC Code
-              </label>
-              <input
-                type="text"
-                value={formData.ifscCode}
-                onChange={(e) =>
-                  handleInputChange('ifscCode', e.target.value.toUpperCase())
-                }
-                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
-                  errors.ifscCode ? 'border-red-500' : 'border-gray-300'
-                }`}
-                placeholder="SBIN0000123"
-              />
-              {errors.ifscCode && (
-                <p className="text-red-500 text-sm mt-1">{errors.ifscCode}</p>
-              )}
-            </div>
-          </div>
-        </div>
-
         {/* Account Credentials */}
         <div className="space-y-4">
           <h4 className="font-medium text-gray-800">
@@ -964,7 +930,11 @@ const NewShopRegistrationModal = ({ isOpen, onClose, onSuccess }) => {
               </Button>
 
               {currentStep < 3 ? (
-                <Button type="button" variant="secondary" onClick={handleNext}>
+                <Button 
+                  type="button" 
+                  variant="secondary" 
+                  onClick={handleNextClick}
+                >
                   Next
                 </Button>
               ) : (

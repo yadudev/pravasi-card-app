@@ -520,7 +520,15 @@ class ShopController {
     try {
       const { id } = req.params;
       const { notes } = req.body;
-      const adminId = req.user.id;
+
+      // Fix: Use req.admin instead of req.user and add validation
+      const adminId = req.admin?.id;
+      if (!adminId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Unauthorized: Admin ID not found',
+        });
+      }
 
       const shop = await Shop.findByPk(id);
       if (!shop) {
@@ -579,7 +587,15 @@ class ShopController {
     try {
       const { id } = req.params;
       const { reason } = req.body;
-      const adminId = req.user.id;
+
+      // Fix: Use req.admin instead of req.user and add validation
+      const adminId = req.admin?.id;
+      if (!adminId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Unauthorized: Admin ID not found',
+        });
+      }
 
       const shop = await Shop.findByPk(id);
       if (!shop) {
@@ -638,7 +654,15 @@ class ShopController {
     try {
       const { id } = req.params;
       const { reason } = req.body;
-      const adminId = req.user.id;
+
+      // Fix: Use req.admin instead of req.user and add validation
+      const adminId = req.admin?.id;
+      if (!adminId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Unauthorized: Admin ID not found',
+        });
+      }
 
       const shop = await Shop.findByPk(id);
       if (!shop) {
@@ -833,7 +857,15 @@ class ShopController {
   static async bulkUpdateShops(req, res) {
     try {
       const { shopIds, action, reason } = req.body;
-      const adminId = req.user.id;
+
+      // Fix: Use req.admin instead of req.user and add validation
+      const adminId = req.admin?.id;
+      if (!adminId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Unauthorized: Admin ID not found',
+        });
+      }
 
       const shops = await Shop.findAll({
         where: { id: { [Op.in]: shopIds } },
