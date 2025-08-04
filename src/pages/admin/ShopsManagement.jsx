@@ -218,7 +218,7 @@ const ShopsManagement = () => {
     blocked: shops.filter((s) => s.status === 'blocked').length,
     rejected: shops.filter((s) => s.status === 'rejected').length,
   };
-
+  
   // Initial load
   useEffect(() => {
     fetchShops();
@@ -466,7 +466,7 @@ const ShopsManagement = () => {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-sm">
-                    {new Date(shop.registrationDate).toLocaleDateString()}
+                   {new Date(shop.createdAt).toLocaleDateString('en-GB')}
                   </TableCell>
                   <TableCell>
                     <div className="flex space-x-1">
