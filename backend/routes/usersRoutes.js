@@ -3,6 +3,8 @@ const { body, query, param } = require('express-validator');
 const UserController = require('../controllers/admin/userController');
 const AuthMiddleware = require('../middleware/userAuth');
 const ValidationMiddleware = require('../middleware/validation');
+const { PaymentController } = require('../controllers/admin/paymentController');
+const { RazorpayCallback } = require('../controllers/admin/raxorpaycallback')
 
 const router = express.Router();
 
@@ -567,6 +569,35 @@ router.post(
     ValidationMiddleware.validate,
   ],
   UserController.subscribeToNewsletter
+);
+
+/**
+ * Payment (private route)
+ * POST /api/users/payment
+ */
+router.post(
+  '/payment',
+  [
+    AuthMiddleware.authenticate,
+    // AuthMiddleware.authorize('user'),
+    body('amount')
+      .isInt({ min: 0 })
+      .withMessage('Please provide a valid amount'),
+  ],
+  PaymentController
+);
+
+/**
+ * Razorpay callback (private route)
+ * POST /api/users/razorpay/callback
+ */
+router.post(
+  '/razorpay/callback',
+  [
+    AuthMiddleware.authenticate,
+    AuthMiddleware.authorize('user'),
+  ],
+  RazorpayCallback
 );
 
 module.exports = router;

@@ -47,6 +47,7 @@ db.Banner = db.Banner || require('./Banner')(sequelize, DataTypes);
 db.Blog = db.Blog || require('./Blog')(sequelize, DataTypes);
 db.FAQ = db.FAQ || require('./FAQ')(sequelize, DataTypes);
 db.OTPSessions =db.OTPSessions || require('./OTPSession')(sequelize, DataTypes);
+db.Payment =db.Payment || require('./Payment')(sequelize, DataTypes);
 // OPTION 1: Use only the automatic association setup
 // Define all model associations using each model's associate method
 Object.keys(db).forEach((modelName) => {
