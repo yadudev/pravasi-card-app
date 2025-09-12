@@ -362,6 +362,46 @@ export const usersAPI = {
     return response.json();
   },
 
+  makePayment: async (paymentData) => {
+    const token = localStorage.getItem('accessToken');
+    console.log({ accessToken: token });
+
+    const response = await fetch(`${baseUrl}/users/payment`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(paymentData),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Payment request failed: ${response.status}`);
+    }
+
+    return response.json();
+  },
+
+  updatePaymentStatus: async (paymentData) => {
+    const token = localStorage.getItem('accessToken');
+    console.log({ accessToken: token });
+
+    const response = await fetch(`${baseUrl}/users/razorpay/callback`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(paymentData), // send entire Razorpay payload
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to update payment status: ${response.status}`);
+    }
+
+    return response.json();
+  },
+
   getUserDiscountHistory: (id) =>
     apiCall(`/admin/users/${id}/discount-history`),
 

@@ -415,6 +415,7 @@ class UserController {
           'isProfileComplete',
           'registrationStep',
           'location',
+          'paymentStatus',
         ],
       });
 
@@ -436,6 +437,7 @@ class UserController {
           currentStep: user.registrationStep,
           hasPrivilegeCard: !!user.discountCard,
           needsProfileCompletion: !user.isProfileComplete,
+          paymentStatus: user.paymentStatus,
         },
         loginAccount: {
           role: admin?.role || 'user',
@@ -2672,7 +2674,7 @@ class UserController {
   static async renewCard(req, res) {
     try {
       const userId = req.user?.id || req.admin?.userId;
-      const { months = 1 } = req.body; // Default to 1 months renewal
+      const { months = 1 } = req.body; 
 
       if (!userId) {
         return res

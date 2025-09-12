@@ -17,6 +17,72 @@ const ManageCardsModal = ({ isOpen, onClose, user, onOpenOTPModal }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [isActivating, setIsActivating] = useState(false);
+  const [userData, setUserData] = useState({
+    email: '',
+    phone: '',
+    name: '',
+  });
+
+  // Payment related states
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [profileData, setProfileData] = useState(null);
+
+  // ✅ Payment and card checks
+  const isPaymentDone = profileData?.status?.paymentStatus === true;
+
+  const expiryDate = profileData?.privilegeCard?.expiresAt
+    ? new Date(profileData.privilegeCard.expiresAt)
+    : null;
+
+  const isCardExpired = expiryDate ? expiryDate < new Date() : true;
+
+  // ✅ Overlay condition -> show if NOT paid OR expired
+  const showOverlay = !isPaymentDone || isCardExpired;
+
+  // ✅ Payment type logic
+  let paymentType = 'NEW_PURCHASE';
+  if (isPaymentDone && isCardExpired) {
+    paymentType = 'RENEWAL';
+  }
+
+  const fetchUserProfile = async () => {
+    try {
+      const response = await usersAPI.getProfileStatus();
+      return response?.data;
+    } catch (error) {
+      console.error('Error fetching user profile:', error);
+      throw error;
+    }
+  };
+
+  useEffect(() => {
+    const storedUser = localStorage.getItem('userData');
+    if (storedUser) {
+      try {
+        const parsedUser = JSON.parse(storedUser);
+        setUserData({
+          email: parsedUser?.email || '',
+          phone: parsedUser?.phone || '',
+          name: parsedUser?.fullName || '',
+        });
+      } catch (error) {
+        console.error('Failed to parse user data from localStorage:', error);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        const data = await fetchUserProfile();
+        setProfileData(data);
+      } catch (error) {
+        console.error('Error in loadProfile:', error);
+      }
+    };
+
+    loadProfile();
+  }, []);
 
   // Fetch data when modal opens
   useEffect(() => {
@@ -32,7 +98,7 @@ const ManageCardsModal = ({ isOpen, onClose, user, onOpenOTPModal }) => {
 
       const [cardResponse, otpResponse] = await Promise.all([
         usersAPI.getUserCardDetails(),
-        usersAPI.getOtpHistory({ limit: 4 }), // Get 4 recent OTPs to match UI grid
+        usersAPI.getOtpHistory({ limit: 4 }),
       ]);
 
       setCardDetails(cardResponse.data);
@@ -45,12 +111,56 @@ const ManageCardsModal = ({ isOpen, onClose, user, onOpenOTPModal }) => {
     }
   };
 
-  const handleRenew = async () => {
+    // ✅ Updated Payment Handler
+  const handlePayNowClick = async () => {
+    if (!userData.email || !userData.phone) {
+      alert('Please complete your profile before making payment.');
+      return;
+    }
+
+    setIsProcessingPayment(true);
+
     try {
-      await usersAPI.renewCard(1);
-      await fetchData(); // Refresh data
-    } catch (err) {
-      console.error('Error renewing card:', err);
+      console.log('Initiating payment for user:', userData);
+
+      const response = await usersAPI.makePayment({
+        total_amount: 1500,
+        payment_type: paymentType,
+      });
+
+      console.log('Payment API Response:', response);
+
+      const paymentUrl = response?.paymentLinkUrl || null;
+
+      if (response?.result && paymentUrl) {
+        console.log('Redirecting to payment URL:', paymentUrl);
+        window.location.href = paymentUrl;
+      } else if (paymentUrl) {
+        console.log('Fallback: Opening payment in new tab:', paymentUrl);
+        window.open(paymentUrl, '_blank');
+      } else {
+        console.error('No payment URL found in response:', response);
+        throw new Error('Payment URL not received from server');
+      }
+    } catch (error) {
+      console.error('Payment initiation failed:', error);
+
+      if (error.message.includes('401')) {
+        alert('Please log in to make payment.');
+      } else if (error.message.includes('403')) {
+        alert('You do not have permission to make payment.');
+      } else if (error.message.includes('500')) {
+        alert('Server error. Please try again later.');
+      } else if (error.message.includes('400')) {
+        alert('Invalid payment details. Please check your information.');
+      } else {
+        alert(
+          error.message ||
+            'Payment failed. Please check your connection and try again.'
+        );
+      }
+    } finally {
+      setIsProcessingPayment(false);
     }
   };
 
@@ -77,7 +187,6 @@ const ManageCardsModal = ({ isOpen, onClose, user, onOpenOTPModal }) => {
     setIsActivating(true);
 
     try {
-      // Call API to send Email OTP
       const response = await usersAPI.sendEmailOTP({
         phone: user.phone,
         email: user.email,
@@ -85,7 +194,6 @@ const ManageCardsModal = ({ isOpen, onClose, user, onOpenOTPModal }) => {
         name: user.name,
       });
       if (response.success) {
-        // Check if onOpenOTPModal function is provided
         if (onOpenOTPModal && typeof onOpenOTPModal === 'function') {
           onOpenOTPModal(response.data?.sessionId);
         } else {
@@ -99,7 +207,6 @@ const ManageCardsModal = ({ isOpen, onClose, user, onOpenOTPModal }) => {
     } catch (error) {
       console.error('Error sending Email OTP:', error);
 
-      // Handle different types of errors
       if (error.message.includes('401')) {
         alert('Please log in to activate your card.');
       } else if (error.message.includes('403')) {
@@ -117,7 +224,6 @@ const ManageCardsModal = ({ isOpen, onClose, user, onOpenOTPModal }) => {
   };
 
   const handleBackdropClick = (e) => {
-    // Close modal when clicking on backdrop (only if not activating)
     if (e.target === e.currentTarget && !isActivating) {
       onClose();
     }
@@ -143,26 +249,28 @@ const ManageCardsModal = ({ isOpen, onClose, user, onOpenOTPModal }) => {
             </p>
           </div>
           <div className="flex justify-end mb-4">
-            <button
-              onClick={handleActivateClick}
-              disabled={isActivating}
-              className="bg-[#AFDCFF] text-[#3D3C96] py-2 px-4 border border-[#3D3C96] rounded-full text-sm font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isActivating ? (
-                <div className="flex items-center space-x-2">
-                  <Loader2 size={16} className="animate-spin" />
-                  <span>Sending OTP...</span>
-                </div>
-              ) : (
-                'Activate Now'
-              )}
-            </button>
+            {!showOverlay && (
+              <button
+                onClick={handleActivateClick}
+                disabled={isActivating}
+                className="bg-[#AFDCFF] text-[#3D3C96] py-2 px-4 border border-[#3D3C96] rounded-full text-sm font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isActivating ? (
+                  <div className="flex items-center space-x-2">
+                    <Loader2 size={16} className="animate-spin" />
+                    <span>Sending OTP...</span>
+                  </div>
+                ) : (
+                  'Activate Now'
+                )}
+              </button>
+            )}
           </div>
         </div>
         {/* Content */}
         <div className="p-6 max-h-[75vh] overflow-y-auto">
           {/* Card Section */}
-          <div className="mb-6">
+          <div className="mb-6 relative">
             <div className="flex flex-col lg:flex-row gap-6">
               <div>
                 <LoyaltyCard
@@ -186,7 +294,9 @@ const ManageCardsModal = ({ isOpen, onClose, user, onOpenOTPModal }) => {
                   <p className="text-base font-semibold">
                     {cardDetails?.card?.createdAt &&
                     cardDetails?.card?.expiresAt
-                      ? `${formatDisplayDate(cardDetails.card.createdAt)} – ${formatDisplayDate(cardDetails.card.expiresAt)}`
+                      ? `${formatDisplayDate(
+                          cardDetails.card.createdAt
+                        )} – ${formatDisplayDate(cardDetails.card.expiresAt)}`
                       : ''}
                   </p>
                 </div>
@@ -204,39 +314,43 @@ const ManageCardsModal = ({ isOpen, onClose, user, onOpenOTPModal }) => {
                     {cardDetails?.activity?.recentTransactions} redemptions
                   </p>
                 </div>
-                <div className="flex flex-col items-center justify-center text-center space-y-2">
-                  <button
-                    className="font-semibold px-4 py-4 border-2 border-[#3D3C96] rounded-full shadow-lg flex items-center space-x-2 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                    onClick={handleRenew}
-                    disabled={loading}
-                  >
-                    {loading ? (
-                      <Loader2
-                        size={20}
-                        className="animate-spin text-[#222158]"
-                      />
-                    ) : (
-                      <>
-                        <span className="text-[#222158] font-semibold text-sm">
-                          Renew Now
-                        </span>
-                        <ArrowUpRight size={20} className="text-[#222158]" />
-                      </>
-                    )}
-                  </button>
-                  <p className="text-xs text-gray-500">
-                    Click to extend your card validity for the next 30 days.
-                  </p>
-                </div>
               </div>
             </div>
+            {showOverlay && (
+              <div
+                className="absolute inset-0 flex flex-col items-center justify-center 
+                    bg-white/70 backdrop-blur-md rounded-lg"
+              >
+                <p className="text-red-600 font-semibold text-lg pb-6">
+                  {paymentType === 'RENEWAL'
+                    ? 'Your card has expired. Please renew your card.'
+                    : 'Your card is inactive. Please make payment to activate.'}
+                </p>
+                <button
+                  className="bg-sky-300 hover:bg-sky-200 font-semibold px-12 py-4 rounded-full shadow-lg flex items-center space-x-2 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={handlePayNowClick}
+                  disabled={isProcessingPayment}
+                >
+                  {isProcessingPayment ? (
+                    <Loader2
+                      size={20}
+                      className="animate-spin text-[#222158]"
+                    />
+                  ) : (
+                    <span className="text-[#222158] font-semibold text-xl">
+                      Make Payment
+                    </span>
+                  )}
+                </button>
+              </div>
+            )}
           </div>
+
           {/* OTP Send History */}
           <div>
             <h3 className="text-lg font-semibold mb-4">OTP Send History</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {loading ? (
-                // Loading placeholders that match the UI
                 <>
                   <div className="flex items-center justify-between bg-gray-100 p-4 rounded-xl animate-pulse">
                     <div className="flex items-center gap-3">
@@ -282,7 +396,9 @@ const ManageCardsModal = ({ isOpen, onClose, user, onOpenOTPModal }) => {
                       </div>
                     </div>
                     <span
-                      className={`text-sm font-semibold py-1 px-3 rounded-full ${getStatusColor(otp.status)}`}
+                      className={`text-sm font-semibold py-1 px-3 rounded-full ${getStatusColor(
+                        otp.status
+                      )}`}
                     >
                       {otp.status.toUpperCase()}
                     </span>

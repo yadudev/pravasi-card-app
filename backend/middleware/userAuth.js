@@ -63,7 +63,7 @@ const userAuth = {
         if (role === 'admin') {
           account = await Admin.findByPk(decoded.id);
         } else {
-          account = await User.findByPk(decoded.id);
+          account = await Admin.findByPk(decoded.id);
         }
 
         if (!account || !account.isActive) {

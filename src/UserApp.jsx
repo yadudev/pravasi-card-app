@@ -7,6 +7,7 @@ import SearchPage from './pages/SearchPage';
 import SearchResultsPage from './pages/SearchResultsPage';
 import UserProtectedRoute from './components/UserProtectedRoute';
 import { useAuth } from './constants/AuthContext';
+import PaymentCallback from './components/PaymentCallback';
 
 const NotFoundPage = () => {
   const navigate = useNavigate();
@@ -101,7 +102,7 @@ function UserApp() {
       <main className="flex-1">
         <Routes>
           <Route path="/" element={<RootPage />} />
-
+          <Route path="/payment-callback" element={<PaymentCallback />} />
           <Route
             path="/search"
             element={

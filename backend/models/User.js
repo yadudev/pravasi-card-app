@@ -42,6 +42,10 @@ module.exports = (sequelize, DataTypes) => {
       },
       referralCode: { type: DataTypes.STRING(20), unique: true },
       referredBy: { type: DataTypes.INTEGER },
+      paymentStatus: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false, // false = unpaid, true = paid
+      },
     },
     {
       tableName: 'users',
