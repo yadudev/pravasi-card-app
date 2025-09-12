@@ -22,290 +22,184 @@ import { usersAPI } from '../services/api';
 import OTPModal from '../components/OTPModal';
 import DiscountCard from '../components/DiscountCard';
 
+// ========================================
+// CONSTANTS
+// ========================================
+const CATEGORIES_PER_PAGE = 4;
+const DEFAULT_SEARCH_RADIUS = 10; // km
+const DEFAULT_LOCATION = 'Kochi, Kerala';
+const PAYMENT_AMOUNT = 1500;
+const OPENCAGE_API_KEY = 'YOUR_API_KEY'; // Replace with actual API key
+
+const AVAILABLE_LOCATIONS = [
+  'Mumbai, Maharashtra',
+  'Delhi, Delhi',
+  'Bangalore, Karnataka',
+  'Hyderabad, Telangana',
+  'Chennai, Tamil Nadu',
+  'Kolkata, West Bengal',
+  'Pune, Maharashtra',
+  'Ahmedabad, Gujarat',
+  'Kochi, Kerala',
+  'Thiruvananthapuram, Kerala',
+];
+
+const SHOP_CATEGORIES = [
+  { name: 'Shopping', iconName: 'Shopping', color: 'bg-[#1C1061]' },
+  { name: 'Healthcare', iconName: 'Healthcare', color: 'bg-[#0065B3]' },
+  { name: 'Travel', iconName: 'Travel', color: 'bg-[#312F92]' },
+  { name: 'Dining', iconName: 'Dining', color: 'bg-[#1A49A1]' },
+  { name: 'Entertainment', iconName: 'Shopping', color: 'bg-[#1C1061]' },
+  { name: 'Beauty', iconName: 'Healthcare', color: 'bg-[#0065B3]' },
+  { name: 'Home & Living', iconName: 'Travel', color: 'bg-[#312F92]' },
+  { name: 'Services', iconName: 'Dining', color: 'bg-[#1A49A1]' },
+];
+
+const HOW_IT_WORKS_STEPS = [
+  {
+    step: 1,
+    title: 'Apply for Your Pravasi Previlage Card',
+    description:
+      'Fill out a simple form with your name, email, and your preferred discount category (e.g., Restaurants, Fashion, Groceries). Click "Apply Now" to submit your request for a loyalty card.',
+  },
+  {
+    step: 2,
+    title: 'SMS Verification with OTP',
+    description:
+      "Once you apply, you'll receive an SMS with a One-Time Password (OTP). Enter this OTP on the website to verify your identity and confirm your interest in the selected discount offer.",
+  },
+  {
+    step: 3,
+    title: 'Activate and Use Your Discount Card',
+    description:
+      'After OTP verification, your loyalty card will be issued with a countdown timer. Click "Activate Now" before the timer expires.',
+  },
+];
+
+const FEATURES = [
+  {
+    icon: BagBroken,
+    title: 'Discounts in All the Right Places',
+    description:
+      "Whether you're visiting family, dining out, shopping for gifts, or looking for personal care services — our cards unlock special rates at top-rated restaurants, retail outlets, beauty salons, wellness centers, grocery stores, and much more.",
+  },
+  {
+    icon: Clock,
+    title: 'Time-Limited Offers That Add Real Value',
+    description:
+      "We believe in giving you the best when it matters the most. Every card comes with exclusive discounts that are valid for a limited time creating urgency but also ensuring freshness and genuine value. Activate when you're ready and use it before it expires.",
+  },
+  {
+    icon: EarthBroken,
+    title: 'Personalized Offers Based on Your Location & Needs',
+    description:
+      "Once you select a category (like food, shopping, or wellness), our platform shows you the most relevant offers near you. This way, you only see discounts that you'll actually use tailored for where you are and what you love.",
+  },
+  {
+    icon: KeyBroken,
+    title: 'Verified Cards & Secure Access Process',
+    description:
+      "We believe in giving you the best when it matters the most. Every card comes with exclusive discounts that are valid for a limited time creating urgency but also ensuring freshness and genuine value. Activate when you're ready and use it before it expires.",
+  },
+];
+
+const FAQ_DATA = [
+  {
+    question: 'What is a Pravasi Previlage Discount Card?',
+    answer:
+      'The Pravasi Previlage Card is a digital loyalty card that provides exclusive discounts and offers at partner stores across various categories including shopping, dining, healthcare, and travel.',
+  },
+  {
+    question: 'How do I get a discount card?',
+    answer:
+      'Simply fill out our application form with your details and preferred category, verify your phone number with the OTP we send, and your digital card will be issued immediately.',
+  },
+  {
+    question: 'Why do I need to enter an OTP?',
+    answer:
+      'OTP verification ensures the security of your account and confirms that you have access to the phone number provided during registration.',
+  },
+  {
+    question: 'How long is the card valid after activation?',
+    answer:
+      'Cards are typically valid for 12 months from the date of activation. You can check the exact expiry date in your digital card.',
+  },
+  {
+    question: 'Can I reuse the same card?',
+    answer:
+      'Yes, once activated, you can use your card multiple times at any of our partner locations until it expires.',
+  },
+];
+
+// ========================================
+// MAIN COMPONENT
+// ========================================
 const SearchPage = () => {
   const navigate = useNavigate();
+
+  // ========================================
+  // STATE VARIABLES
+  // ========================================
+
+  // Search related state
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedLocation, setSelectedLocation] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+
+  // Category navigation state
   const [activeCategory, setActiveCategory] = useState(0);
-  const [isOTPModalOpen, setIsOTPModalOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
+
+  // Location state
   const [userLocation, setUserLocation] = useState(null);
   const [locationName, setLocationName] = useState('');
-  const [isSearching, setIsSearching] = useState(false);
+
+  // Modal state
+  const [isOTPModalOpen, setIsOTPModalOpen] = useState(false);
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
 
-  // OTP related states
-  const [isActivating, setIsActivating] = useState(false);
-  const [otpSessionId, setOtpSessionId] = useState(null);
-
+  // User and profile state
   const [userData, setUserData] = useState({
     email: '',
     phone: '',
     name: '',
   });
+  const [profileData, setProfileData] = useState(null);
 
-  // Get user's current location
-  useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          const { latitude, longitude } = position.coords;
-          setUserLocation({ lat: latitude, lng: longitude });
+  // OTP related state
+  const [isActivating, setIsActivating] = useState(false);
+  const [otpSessionId, setOtpSessionId] = useState(null);
 
-          // Reverse geocoding to get location name
-          try {
-            const response = await fetch(
-              `https://api.opencagedata.com/geocode/v1/json?q=${latitude}+${longitude}&key=YOUR_API_KEY`
-            );
-            const data = await response.json();
-            if (data.results && data.results.length > 0) {
-              const city =
-                data.results[0].components.city ||
-                data.results[0].components.town ||
-                data.results[0].components.village;
-              const state = data.results[0].components.state;
-              setLocationName(`${city}, ${state}`);
-            }
-          } catch (error) {
-            console.error('Error getting location name:', error);
-            setLocationName('Current Location');
-          }
-        },
-        (error) => {
-          console.error('Error getting location:', error);
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 300000,
-        }
-      );
-    }
-  }, []);
+  // Payment related state
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
 
-  useEffect(() => {
-    const storedUser = localStorage.getItem('userData');
-    if (storedUser) {
-      try {
-        const parsedUser = JSON.parse(storedUser);
-        setUserData({
-          email: parsedUser?.email || '',
-          phone: parsedUser?.phone || '',
-          name: parsedUser?.fullName || '',
-        });
-      } catch (error) {
-        console.error('Failed to parse user data from localStorage:', error);
-      }
-    }
-  }, []);
+  // ========================================
+  // COMPUTED VALUES
+  // ========================================
+  const totalCategoryPages = Math.ceil(
+    SHOP_CATEGORIES.length / CATEGORIES_PER_PAGE
+  );
+  const isPaymentDone = profileData?.status?.paymentStatus === true;
 
-  const categories = [
-    { name: 'Shopping', iconName: 'Shopping', color: 'bg-[#1C1061]' },
-    { name: 'Healthcare', iconName: 'Healthcare', color: 'bg-[#0065B3]' },
-    { name: 'Travel', iconName: 'Travel', color: 'bg-[#312F92]' },
-    { name: 'Dining', iconName: 'Dining', color: 'bg-[#1A49A1]' },
-    { name: 'Entertainment', iconName: 'Shopping', color: 'bg-[#1C1061]' },
-    { name: 'Beauty', iconName: 'Healthcare', color: 'bg-[#0065B3]' },
-    { name: 'Home & Living', iconName: 'Travel', color: 'bg-[#312F92]' },
-    { name: 'Services', iconName: 'Dining', color: 'bg-[#1A49A1]' },
-  ];
+  const cardExpiryDate = profileData?.privilegeCard?.expiresAt
+    ? new Date(profileData.privilegeCard.expiresAt)
+    : null;
+  const isCardExpired = cardExpiryDate ? cardExpiryDate < new Date() : true;
 
-  const categoriesPerPage = 4;
-  const totalPages = Math.ceil(categories.length / categoriesPerPage);
+  // Show overlay if payment not done OR card expired
+  const showOverlay = !isPaymentDone || isCardExpired;
 
-  const getCurrentCategories = () => {
-    const startIndex = currentPage * categoriesPerPage;
-    const endIndex = startIndex + categoriesPerPage;
-    return categories.slice(startIndex, endIndex);
-  };
+  // Determine payment type for renewal vs new purchase
+  const paymentType =
+    isPaymentDone && isCardExpired ? 'RENEWAL' : 'NEW_PURCHASE';
 
-  useEffect(() => {
-    const handleCategoryFromHomePage = () => {
-      try {
-        // First check navigation state
-        if (location.state?.selectedCategory && location.state?.fromHomePage) {
-          const { selectedCategory } = location.state;
-          console.log('Category selected from HomePage:', selectedCategory);
+  // ========================================
+  // HELPER FUNCTIONS
+  // ========================================
 
-          // Set the search query to the category name
-          setSearchQuery(selectedCategory.name);
-
-          // Find the category in the current categories array and set the page/index appropriately
-          const categoryIndex = categories.findIndex(
-            (cat) => cat.name === selectedCategory.name
-          );
-          if (categoryIndex !== -1) {
-            const pageIndex = Math.floor(categoryIndex / categoriesPerPage);
-            const categoryOnPage = categoryIndex % categoriesPerPage;
-
-            setCurrentPage(pageIndex);
-            setActiveCategory(categoryOnPage);
-          }
-
-          // Clear the navigation state to prevent re-triggering
-          window.history.replaceState({}, document.title);
-        }
-        // Fallback to sessionStorage
-        else {
-          const storedCategory = sessionStorage.getItem('selectedCategory');
-          if (storedCategory) {
-            try {
-              const selectedCategory = JSON.parse(storedCategory);
-              console.log('Category from sessionStorage:', selectedCategory);
-
-              setSearchQuery(selectedCategory.name);
-
-              // Find the category and set appropriate page/index
-              const categoryIndex = categories.findIndex(
-                (cat) => cat.name === selectedCategory.name
-              );
-              if (categoryIndex !== -1) {
-                const pageIndex = Math.floor(categoryIndex / categoriesPerPage);
-                const categoryOnPage = categoryIndex % categoriesPerPage;
-
-                setCurrentPage(pageIndex);
-                setActiveCategory(categoryOnPage);
-              }
-
-              // Clear sessionStorage after using
-              sessionStorage.removeItem('selectedCategory');
-            } catch (error) {
-              console.error('Error parsing stored category:', error);
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Error handling category from HomePage:', error);
-      }
-    };
-
-    handleCategoryFromHomePage();
-  }, [location.state, categories, categoriesPerPage]);
-
-  const nextCategory = () => {
-    setCurrentPage((prevPage) => {
-      const nextPage = (prevPage + 1) % totalPages;
-      return nextPage;
-    });
-    setActiveCategory(0);
-  };
-
-  const prevCategory = () => {
-    setCurrentPage((prevPage) => {
-      const newPage = prevPage === 0 ? totalPages - 1 : prevPage - 1;
-      return newPage;
-    });
-    setActiveCategory(0);
-  };
-
-  const handleCategoryClick = async (index) => {
-    setActiveCategory(index);
-
-    // Get the actual category from the current page
-    const currentCategories = getCurrentCategories();
-    const selectedCategory = currentCategories[index];
-
-    if (selectedCategory) {
-      // Set the search query and location
-      const categoryQuery = selectedCategory.name;
-      let searchLocation = selectedLocation;
-
-      // Use current location if no location is selected
-      if (!selectedLocation && userLocation && locationName) {
-        searchLocation = locationName;
-      }
-
-      // Fallback to a default location if no location is available
-      if (!searchLocation) {
-        // Option 1: Use a default location (adjust as needed)
-        searchLocation = 'Kochi, Kerala'; // Default location
-
-        // Option 2: Or ask user to select location first
-        // alert('Please select a location from the dropdown or allow location access to search by category');
-        // return;
-
-        console.log(
-          'No location detected, using default location:',
-          searchLocation
-        );
-      }
-
-      setIsSearching(true);
-
-      try {
-        // Prepare search parameters for the backend API
-        const searchParams = {
-          search: categoryQuery.trim(),
-          location: searchLocation,
-          category: selectedCategory.name,
-          latitude: userLocation?.lat || null, // Allow null if location not available
-          longitude: userLocation?.lng || null, // Allow null if location not available
-          maxDistance: 10, // Search within 10km
-          sortBy: 'distance',
-          sortOrder: 'ASC',
-          page: 1,
-          limit: 50,
-        };
-
-        console.log('Category Search Parameters:', searchParams);
-
-        // Make API call using the usersAPI service
-        const apiResponse = await usersAPI.searchShops(searchParams);
-
-        console.log('Category API Response:', apiResponse);
-
-        // Transform the response data
-        const transformedShops = transformShopData(apiResponse);
-
-        console.log('Category Transformed Shops:', transformedShops);
-
-        // Prepare data for the results page
-        const searchResults = {
-          shops: transformedShops,
-          pagination: apiResponse.pagination || {},
-          searchMetadata: apiResponse.searchMetadata || {},
-          totalResults:
-            apiResponse.pagination?.totalRecords || transformedShops.length,
-        };
-
-        const searchParamsForResults = {
-          query: categoryQuery,
-          location: searchLocation,
-          coordinates: userLocation || null, // Allow null if not available
-          category: selectedCategory.name,
-        };
-
-        // Store search results and params for the results page
-        sessionStorage.setItem(
-          'searchParams',
-          JSON.stringify(searchParamsForResults)
-        );
-        sessionStorage.setItem('searchResults', JSON.stringify(searchResults));
-
-        // Navigate to search results page
-        navigate('/search-results', {
-          state: { searchParams: searchParamsForResults, searchResults },
-        });
-      } catch (error) {
-        console.error('Category search failed:', error);
-
-        // Handle different types of errors
-        if (error.message.includes('401')) {
-          alert('Please log in to search for shops.');
-        } else if (error.message.includes('403')) {
-          alert('You do not have permission to search shops.');
-        } else if (error.message.includes('500')) {
-          alert('Server error. Please try again later.');
-        } else {
-          alert('Search failed. Please check your connection and try again.');
-        }
-      } finally {
-        setIsSearching(false);
-      }
-    }
-  };
-
-  // Transform backend API response to frontend format
+  /**
+   * Transform backend API response to frontend format
+   */
   const transformShopData = (apiResponse) => {
     if (!apiResponse || !apiResponse.data || !Array.isArray(apiResponse.data)) {
       return [];
@@ -340,7 +234,9 @@ const SearchPage = () => {
     }));
   };
 
-  // Helper function to format opening hours
+  /**
+   * Format opening hours from API response
+   */
   const formatOpeningHours = (openingHours) => {
     if (typeof openingHours === 'string') {
       return openingHours;
@@ -351,19 +247,149 @@ const SearchPage = () => {
     return '9:00 AM - 9:00 PM';
   };
 
-  const handleSearch = async () => {
-    // Determine the search location
-    let searchLocation = selectedLocation;
+  /**
+   * Handle API errors with user-friendly messages
+   */
+  const handleApiError = (error, context) => {
+    console.error(`${context} failed:`, error);
 
-    // If no location is selected, use current location
-    if (!selectedLocation && userLocation) {
-      searchLocation = locationName || 'Current Location';
+    if (error.message.includes('401')) {
+      alert(`Please log in to ${context.toLowerCase()}.`);
+    } else if (error.message.includes('403')) {
+      alert(`You do not have permission to ${context.toLowerCase()}.`);
+    } else if (error.message.includes('429')) {
+      alert('Too many requests. Please try again later.');
+    } else if (error.message.includes('500')) {
+      alert('Server error. Please try again later.');
+    } else if (error.message.includes('400')) {
+      alert('Invalid request. Please check your information.');
+    } else {
+      alert(
+        error.message ||
+          `${context} failed. Please check your connection and try again.`
+      );
     }
+  };
 
+  /**
+   * Get location name using reverse geocoding
+   */
+  const getLocationName = async (latitude, longitude) => {
+    try {
+      const response = await fetch(
+        `https://api.opencagedata.com/geocode/v1/json?q=${latitude}+${longitude}&key=${OPENCAGE_API_KEY}`
+      );
+      const data = await response.json();
+
+      if (data.results && data.results.length > 0) {
+        const components = data.results[0].components;
+        const city = components.city || components.town || components.village;
+        const state = components.state;
+        return city && state ? `${city}, ${state}` : 'Current Location';
+      }
+      return 'Current Location';
+    } catch (error) {
+      console.error('Error getting location name:', error);
+      return 'Current Location';
+    }
+  };
+
+  /**
+   * Get current categories for pagination
+   */
+  const getCurrentCategories = () => {
+    const startIndex = currentPage * CATEGORIES_PER_PAGE;
+    const endIndex = startIndex + CATEGORIES_PER_PAGE;
+    return SHOP_CATEGORIES.slice(startIndex, endIndex);
+  };
+
+  /**
+   * Prepare search parameters for API call
+   */
+  const prepareSearchParams = (query, location, category = undefined) => {
+    return {
+      search: query.trim(),
+      location: location,
+      category: category,
+      latitude: userLocation?.lat || null,
+      longitude: userLocation?.lng || null,
+      maxDistance: DEFAULT_SEARCH_RADIUS,
+      sortBy: 'distance',
+      sortOrder: 'ASC',
+      page: 1,
+      limit: 50,
+    };
+  };
+
+  /**
+   * Navigate to search results page with data
+   */
+  const navigateToSearchResults = (searchParams, searchResults) => {
+    // Store data for search results page
+    sessionStorage.setItem('searchParams', JSON.stringify(searchParams));
+    sessionStorage.setItem('searchResults', JSON.stringify(searchResults));
+
+    navigate('/search-results', {
+      state: { searchParams, searchResults },
+    });
+  };
+
+  // ========================================
+  // API FUNCTIONS
+  // ========================================
+
+  /**
+   * Fetch user profile data
+   */
+  const fetchUserProfile = async () => {
+    try {
+      const response = await usersAPI.getProfileStatus();
+      return response?.data;
+    } catch (error) {
+      console.error('Error fetching user profile:', error);
+      throw error;
+    }
+  };
+
+  /**
+   * Perform search API call
+   */
+  const performSearch = async (searchParams) => {
+    try {
+      const apiResponse = await usersAPI.searchShops(searchParams);
+      const transformedShops = transformShopData(apiResponse);
+
+      return {
+        shops: transformedShops,
+        pagination: apiResponse.pagination || {},
+        searchMetadata: apiResponse.searchMetadata || {},
+        totalResults:
+          apiResponse.pagination?.totalRecords || transformedShops.length,
+      };
+    } catch (error) {
+      handleApiError(error, 'Search');
+      throw error;
+    }
+  };
+
+  // ========================================
+  // EVENT HANDLERS
+  // ========================================
+
+  /**
+   * Handle search button click
+   */
+  const handleSearch = async () => {
     // Validate search input
     if (!searchQuery.trim()) {
       alert('Please enter a search query');
       return;
+    }
+
+    // Determine search location
+    let searchLocation = selectedLocation;
+    if (!selectedLocation && userLocation) {
+      searchLocation = locationName || 'Current Location';
     }
 
     if (!searchLocation) {
@@ -374,83 +400,158 @@ const SearchPage = () => {
     setIsSearching(true);
 
     try {
-      // Prepare search parameters for the backend API
-      const searchParams = {
-        search: searchQuery.trim(),
-        location: searchLocation,
-        category: undefined,
-        latitude: userLocation?.lat,
-        longitude: userLocation?.lng,
-        maxDistance: 10, // Search within 10km
-        sortBy: 'distance',
-        sortOrder: 'ASC',
-        page: 1,
-        limit: 50,
-      };
-
+      const searchParams = prepareSearchParams(searchQuery, searchLocation);
       console.log('Search Parameters:', searchParams);
 
-      // Make API call using the usersAPI service
-      const apiResponse = await usersAPI.searchShops(searchParams);
-
-      console.log('API Response:', apiResponse);
-
-      // Transform the response data
-      const transformedShops = transformShopData(apiResponse);
-
-      console.log('Transformed Shops:', transformedShops);
-
-      // Prepare data for the results page
-      const searchResults = {
-        shops: transformedShops,
-        pagination: apiResponse.pagination || {},
-        searchMetadata: apiResponse.searchMetadata || {},
-        totalResults:
-          apiResponse.pagination?.totalRecords || transformedShops.length,
-      };
+      const searchResults = await performSearch(searchParams);
+      console.log('Search Results:', searchResults);
 
       const searchParamsForResults = {
         query: searchQuery,
         location: searchLocation,
         coordinates: userLocation,
-        category: categories[activeCategory]?.name || 'All',
+        category: SHOP_CATEGORIES[activeCategory]?.name || 'All',
       };
 
-      // Store search results and params for the results page
-      sessionStorage.setItem(
-        'searchParams',
-        JSON.stringify(searchParamsForResults)
-      );
-      sessionStorage.setItem('searchResults', JSON.stringify(searchResults));
-
-      navigate('/search-results', {
-        state: { searchParams: searchParamsForResults, searchResults },
-      });
+      navigateToSearchResults(searchParamsForResults, searchResults);
     } catch (error) {
-      console.error('Search failed:', error);
-
-      // Handle different types of errors
-      if (error.message.includes('401')) {
-        alert('Please log in to search for shops.');
-      } else if (error.message.includes('403')) {
-        alert('You do not have permission to search shops.');
-      } else if (error.message.includes('500')) {
-        alert('Server error. Please try again later.');
-      } else {
-        alert('Search failed. Please check your connection and try again.');
-      }
+      // Error already handled in performSearch
     } finally {
       setIsSearching(false);
     }
   };
 
-  // Handler for closing success modal
-  const handleCloseSuccessModal = () => {
-    setIsSuccessModalOpen(false);
-    // Close the manage cards modal as well since activation is complete
+  /**
+   * Handle category card click
+   */
+  const handleCategoryClick = async (index) => {
+    setActiveCategory(index);
+
+    const currentCategories = getCurrentCategories();
+    const selectedCategory = currentCategories[index];
+
+    if (!selectedCategory) return;
+
+    // Determine search location with fallback to default
+    let searchLocation = selectedLocation;
+    if (!selectedLocation && userLocation && locationName) {
+      searchLocation = locationName;
+    }
+    if (!searchLocation) {
+      searchLocation = DEFAULT_LOCATION;
+      console.log(
+        'No location detected, using default location:',
+        searchLocation
+      );
+    }
+
+    setIsSearching(true);
+
+    try {
+      const searchParams = prepareSearchParams(
+        selectedCategory.name,
+        searchLocation,
+        selectedCategory.name
+      );
+      console.log('Category Search Parameters:', searchParams);
+
+      const searchResults = await performSearch(searchParams);
+      console.log('Category Search Results:', searchResults);
+
+      const searchParamsForResults = {
+        query: selectedCategory.name,
+        location: searchLocation,
+        coordinates: userLocation || null,
+        category: selectedCategory.name,
+      };
+
+      navigateToSearchResults(searchParamsForResults, searchResults);
+    } catch (error) {
+      // Error already handled in performSearch
+    } finally {
+      setIsSearching(false);
+    }
   };
 
-  // Handle activation - send Email OTP
+  /**
+   * Handle payment initiation
+   */
+  const handlePayNowClick = async () => {
+    if (!userData.email || !userData.phone) {
+      alert('Please complete your profile before making payment.');
+      return;
+    }
+
+    setIsProcessingPayment(true);
+
+    try {
+      console.log('Initiating payment for user:', userData);
+
+      const response = await usersAPI.makePayment({
+        total_amount: PAYMENT_AMOUNT,
+        payment_type: paymentType,
+      });
+
+      console.log('Payment API Response:', response);
+
+      // Extract payment URL from various possible response formats
+      const paymentUrl =
+        response.result?.paymentLinkUrl ||
+        response.paymentLinkUrl ||
+        response?.paymentLinkUrl;
+
+      if (paymentUrl) {
+        console.log('Payment URL extracted:', paymentUrl);
+
+        // Validate and redirect to payment URL
+        try {
+          const url = new URL(paymentUrl);
+          console.log('URL validation passed:', url.href);
+
+          window.location.href = url.href;
+
+          // Fallback method if redirect doesn't work
+          setTimeout(() => {
+            console.log('Fallback: Opening payment in new tab');
+            const newWindow = window.open(url.href, '_blank');
+            if (!newWindow) {
+              // Handle popup blocked scenario
+              if (
+                confirm(
+                  'Please allow popups for this site, or click OK to copy the payment link.'
+                )
+              ) {
+                navigator.clipboard
+                  .writeText(url.href)
+                  .then(() =>
+                    alert(
+                      'Payment link copied to clipboard. Please paste it in a new tab.'
+                    )
+                  )
+                  .catch(() =>
+                    prompt('Please copy this payment link:', url.href)
+                  );
+              }
+            }
+          }, 2000);
+        } catch (urlError) {
+          console.error('Invalid URL format:', paymentUrl, urlError);
+          alert('Invalid payment URL received. Please try again.');
+        }
+      } else {
+        console.error('No payment URL found in response:', response);
+        throw new Error('Payment URL not received from server');
+      }
+    } catch (error) {
+      handleApiError(error, 'Payment');
+    } finally {
+      setIsProcessingPayment(false);
+    }
+  };
+
+  /**
+   * Handle card activation
+   */
   const handleActivateClick = async () => {
     if (!userData.email) {
       alert('Email not found. Please update your profile.');
@@ -460,13 +561,13 @@ const SearchPage = () => {
     setIsActivating(true);
 
     try {
-      // Call API to send Email OTP
       const response = await usersAPI.sendEmailOTP({
         phone: userData.phone,
         email: userData.email,
         type: 'card_activation',
         name: userData.fullName,
       });
+
       if (response.success) {
         setOtpSessionId(response.data?.sessionId);
         setIsOTPModalOpen(true);
@@ -475,30 +576,15 @@ const SearchPage = () => {
         alert(response.message || 'Failed to send OTP. Please try again.');
       }
     } catch (error) {
-      console.error('Error sending SMS OTP:', error);
-
-      // Handle different types of errors
-      if (error.message.includes('401')) {
-        alert('Please log in to activate your card.');
-      } else if (error.message.includes('403')) {
-        alert('You do not have permission to activate card.');
-      } else if (error.message.includes('429')) {
-        alert('Too many OTP requests. Please try again later.');
-      } else {
-        alert(
-          'Failed to send OTP. Please check your connection and try again.'
-        );
-      }
+      handleApiError(error, 'Card activation');
     } finally {
       setIsActivating(false);
     }
   };
 
-  const handleCloseOTPModal = () => {
-    setIsOTPModalOpen(false);
-    setOtpSessionId(null);
-  };
-
+  /**
+   * Handle OTP verification
+   */
   const handleOTPVerify = async (otpCode) => {
     try {
       const response = await usersAPI.verifyEmailOTP({
@@ -508,11 +594,9 @@ const SearchPage = () => {
       });
 
       if (response.success) {
-        // Close OTP modal and open success modal
         setIsOTPModalOpen(false);
         setOtpSessionId(null);
         setIsSuccessModalOpen(true);
-
         console.log('Card activation successful:', response);
       } else {
         throw new Error(response.message || 'Invalid OTP');
@@ -523,7 +607,9 @@ const SearchPage = () => {
     }
   };
 
-  // SMS OTP resend handler
+  /**
+   * Handle OTP resend
+   */
   const handleOTPResend = async () => {
     try {
       const response = await usersAPI.resendEmailOTP({
@@ -532,106 +618,177 @@ const SearchPage = () => {
       });
 
       if (response.success) {
-        setOtpSessionId(response.sessionId); // Update session ID if needed
+        setOtpSessionId(response.sessionId);
         console.log('Email OTP resent successfully to:', userData.email);
         return true;
       } else {
         throw new Error(response.message || 'Failed to resend OTP');
       }
     } catch (error) {
-      console.error('Error resending SMS OTP:', error);
-      throw error; // Re-throw to handle in modal
+      console.error('Error resending Email OTP:', error);
+      throw error;
     }
   };
 
-  const locations = [
-    'Mumbai, Maharashtra',
-    'Delhi, Delhi',
-    'Bangalore, Karnataka',
-    'Hyderabad, Telangana',
-    'Chennai, Tamil Nadu',
-    'Kolkata, West Bengal',
-    'Pune, Maharashtra',
-    'Ahmedabad, Gujarat',
-    'Kochi, Kerala',
-    'Thiruvananthapuram, Kerala',
-  ];
+  // ========================================
+  // CATEGORY NAVIGATION HANDLERS
+  // ========================================
 
-  const howItWorksSteps = [
-    {
-      step: 1,
-      title: 'Apply for Your Pravasi Previlage Card',
-      description:
-        'Fill out a simple form with your name, email, and your preferred discount category (e.g., Restaurants, Fashion, Groceries). Click "Apply Now" to submit your request for a loyalty card.',
-    },
-    {
-      step: 2,
-      title: 'SMS Verification with OTP',
-      description:
-        "Once you apply, you'll receive an SMS with a One-Time Password (OTP). Enter this OTP on the website to verify your identity and confirm your interest in the selected discount offer.",
-    },
-    {
-      step: 3,
-      title: 'Activate and Use Your Discount Card',
-      description:
-        'After OTP verification, your loyalty card will be issued with a countdown timer. Click "Activate Now" before the timer expires.',
-    },
-  ];
+  const nextCategory = () => {
+    setCurrentPage((prevPage) => (prevPage + 1) % totalCategoryPages);
+    setActiveCategory(0);
+  };
 
-  const features = [
-    {
-      icon: BagBroken,
-      title: 'Discounts in All the Right Places',
-      description:
-        "Whether you're visiting family, dining out, shopping for gifts, or looking for personal care services — our cards unlock special rates at top-rated restaurants, retail outlets, beauty salons, wellness centers, grocery stores, and much more.",
-    },
-    {
-      icon: Clock,
-      title: 'Time-Limited Offers That Add Real Value',
-      description:
-        "We believe in giving you the best when it matters the most. Every card comes with exclusive discounts that are valid for a limited time creating urgency but also ensuring freshness and genuine value. Activate when you're ready and use it before it expires.",
-    },
-    {
-      icon: EarthBroken,
-      title: 'Personalized Offers Based on Your Location & Needs',
-      description:
-        "Once you select a category (like food, shopping, or wellness), our platform shows you the most relevant offers near you. This way, you only see discounts that you'll actually use tailored for where you are and what you love.",
-    },
-    {
-      icon: KeyBroken,
-      title: 'Verified Cards & Secure Access Process',
-      description:
-        "We believe in giving you the best when it matters the most. Every card comes with exclusive discounts that are valid for a limited time creating urgency but also ensuring freshness and genuine value. Activate when you're ready and use it before it expires.",
-    },
-  ];
+  const prevCategory = () => {
+    setCurrentPage((prevPage) =>
+      prevPage === 0 ? totalCategoryPages - 1 : prevPage - 1
+    );
+    setActiveCategory(0);
+  };
 
-  const faqData = [
-    {
-      question: 'What is a Pravasi Previlage Discount Card?',
-      answer:
-        'The Pravasi Previlage Card is a digital loyalty card that provides exclusive discounts and offers at partner stores across various categories including shopping, dining, healthcare, and travel.',
-    },
-    {
-      question: 'How do I get a discount card?',
-      answer:
-        'Simply fill out our application form with your details and preferred category, verify your phone number with the OTP we send, and your digital card will be issued immediately.',
-    },
-    {
-      question: 'Why do I need to enter an OTP?',
-      answer:
-        'OTP verification ensures the security of your account and confirms that you have access to the phone number provided during registration.',
-    },
-    {
-      question: 'How long is the card valid after activation?',
-      answer:
-        'Cards are typically valid for 12 months from the date of activation. You can check the exact expiry date in your digital card.',
-    },
-    {
-      question: 'Can I reuse the same card?',
-      answer:
-        'Yes, once activated, you can use your card multiple times at any of our partner locations until it expires.',
-    },
-  ];
+  // ========================================
+  // MODAL HANDLERS
+  // ========================================
+
+  const handleCloseOTPModal = () => {
+    setIsOTPModalOpen(false);
+    setOtpSessionId(null);
+  };
+
+  const handleCloseSuccessModal = () => {
+    setIsSuccessModalOpen(false);
+  };
+
+  // ========================================
+  // EFFECTS
+  // ========================================
+
+  /**
+   * Load user profile on component mount
+   */
+  useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        const data = await fetchUserProfile();
+        setProfileData(data);
+      } catch (error) {
+        console.error('Error in loadProfile:', error);
+      }
+    };
+
+    loadProfile();
+  }, []);
+
+  /**
+   * Get user's current location
+   */
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          const { latitude, longitude } = position.coords;
+          setUserLocation({ lat: latitude, lng: longitude });
+
+          const locationName = await getLocationName(latitude, longitude);
+          setLocationName(locationName);
+        },
+        (error) => {
+          console.error('Error getting location:', error);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 300000,
+        }
+      );
+    }
+  }, []);
+
+  /**
+   * Load user data from localStorage
+   */
+  useEffect(() => {
+    const storedUser = localStorage.getItem('userData');
+    if (storedUser) {
+      try {
+        const parsedUser = JSON.parse(storedUser);
+        setUserData({
+          email: parsedUser?.email || '',
+          phone: parsedUser?.phone || '',
+          name: parsedUser?.fullName || '',
+        });
+      } catch (error) {
+        console.error('Failed to parse user data from localStorage:', error);
+      }
+    }
+  }, []);
+
+  /**
+   * Handle category selection from home page navigation
+   */
+  useEffect(() => {
+    const handleCategoryFromHomePage = () => {
+      try {
+        // Check navigation state first
+        if (location.state?.selectedCategory && location.state?.fromHomePage) {
+          const { selectedCategory } = location.state;
+          console.log('Category selected from HomePage:', selectedCategory);
+
+          setSearchQuery(selectedCategory.name);
+
+          // Find and set the category page/index
+          const categoryIndex = SHOP_CATEGORIES.findIndex(
+            (cat) => cat.name === selectedCategory.name
+          );
+          if (categoryIndex !== -1) {
+            const pageIndex = Math.floor(categoryIndex / CATEGORIES_PER_PAGE);
+            const categoryOnPage = categoryIndex % CATEGORIES_PER_PAGE;
+            setCurrentPage(pageIndex);
+            setActiveCategory(categoryOnPage);
+          }
+
+          // Clear navigation state
+          window.history.replaceState({}, document.title);
+        }
+        // Fallback to sessionStorage
+        else {
+          const storedCategory = sessionStorage.getItem('selectedCategory');
+          if (storedCategory) {
+            try {
+              const selectedCategory = JSON.parse(storedCategory);
+              console.log('Category from sessionStorage:', selectedCategory);
+
+              setSearchQuery(selectedCategory.name);
+
+              const categoryIndex = SHOP_CATEGORIES.findIndex(
+                (cat) => cat.name === selectedCategory.name
+              );
+              if (categoryIndex !== -1) {
+                const pageIndex = Math.floor(
+                  categoryIndex / CATEGORIES_PER_PAGE
+                );
+                const categoryOnPage = categoryIndex % CATEGORIES_PER_PAGE;
+                setCurrentPage(pageIndex);
+                setActiveCategory(categoryOnPage);
+              }
+
+              sessionStorage.removeItem('selectedCategory');
+            } catch (error) {
+              console.error('Error parsing stored category:', error);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error handling category from HomePage:', error);
+      }
+    };
+
+    handleCategoryFromHomePage();
+  }, [location.state]);
+
+  // ========================================
+  // RENDER
+  // ========================================
 
   const currentCategories = getCurrentCategories();
 
@@ -648,12 +805,13 @@ const SearchPage = () => {
               <br />
               Our Pravasi Previlage Card.
             </h1>
-            {/* Subtitle */}
+
             <p className="text-[#222158] opacity-67 text-xl font-semibold mb-14 font-figtree">
               Find stores near you and enjoy exclusive discounts on shopping,
               <br />
               dining, wellness, and more.
             </p>
+
             {/* Search Form */}
             <div className="max-w-4xl mx-auto mb-16">
               <div className="bg-white rounded-2xl p-3 flex flex-col md:flex-row gap-3">
@@ -664,8 +822,7 @@ const SearchPage = () => {
                     placeholder="Search for shop, healthcare, travel..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full px-4 py-2 border-0 rounded-xl placeholder-[#868686] placeholder-font-semibold 
-             placeholder-text-sm"
+                    className="w-full px-4 py-2 border-0 rounded-xl placeholder-[#868686] placeholder-font-semibold placeholder-text-sm"
                     disabled={isSearching}
                   />
                   <CategoryIcon
@@ -674,6 +831,7 @@ const SearchPage = () => {
                     height={20}
                   />
                 </div>
+
                 {/* Location Dropdown */}
                 <div className="relative min-w-[250px] border border-[#C7C7C7] rounded-2xl p-2">
                   <MapPin
@@ -684,19 +842,20 @@ const SearchPage = () => {
                     value={selectedLocation}
                     onChange={(e) => setSelectedLocation(e.target.value)}
                     className={`w-full pl-12 pr-4 py-3 border-0 rounded-xl cursor-pointer
-              ${selectedLocation === '' ? 'text-[#868686] font-semibold text-sm' : 'text-black'}`}
+                      ${selectedLocation === '' ? 'text-[#868686] font-semibold text-sm' : 'text-black'}`}
                     disabled={isSearching}
                   >
                     <option value="" disabled>
                       Search Location...
                     </option>
-                    {locations.map((location, index) => (
+                    {AVAILABLE_LOCATIONS.map((location, index) => (
                       <option key={index} value={location}>
                         {location}
                       </option>
                     ))}
                   </select>
                 </div>
+
                 {/* Search Button */}
                 <button
                   onClick={handleSearch}
@@ -712,7 +871,8 @@ const SearchPage = () => {
                 </button>
               </div>
             </div>
-            {/* CTA Section - matching the UI layout */}
+
+            {/* CTA Section */}
             <div className="mx-4 md:mx-8 lg:mx-12 font-figtree">
               <div className="flex flex-col md:flex-row items-center justify-between mt-16">
                 {/* Left text */}
@@ -725,6 +885,7 @@ const SearchPage = () => {
                     big!
                   </p>
                 </div>
+
                 {/* Center button */}
                 <div className="flex-shrink-0 mx-8">
                   <div
@@ -734,30 +895,56 @@ const SearchPage = () => {
                         'linear-gradient(177.36deg, #222158 -13.59%, rgba(34, 33, 88, 0) 50.99%)',
                     }}
                   >
-                    <button
-                      className="bg-sky-300 hover:bg-sky-200 font-semibold px-12 py-4 rounded-full shadow-lg flex items-center space-x-2 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                      onClick={handleActivateClick}
-                      disabled={isActivating}
-                    >
-                      {isActivating ? (
-                        <Loader2
-                          size={20}
-                          className="animate-spin text-[#222158]"
-                        />
-                      ) : (
-                        <>
-                          <span className="text-[#222158] font-semibold text-xl">
-                            ACTIVATE
-                          </span>
-                          <ArrowUpRight
+                    {!showOverlay ? (
+                      <button
+                        className="bg-sky-300 hover:bg-sky-200 font-semibold px-12 py-4 rounded-full shadow-lg flex items-center space-x-2 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        onClick={handleActivateClick}
+                        disabled={isActivating}
+                      >
+                        {isActivating ? (
+                          <Loader2
                             size={20}
-                            className="text-[#222158] font-semibold text-xl"
+                            className="animate-spin text-[#222158]"
                           />
-                        </>
-                      )}
-                    </button>
+                        ) : (
+                          <>
+                            <span className="text-[#222158] font-semibold text-xl">
+                              ACTIVATE
+                            </span>
+                            <ArrowUpRight
+                              size={20}
+                              className="text-[#222158] font-semibold text-xl"
+                            />
+                          </>
+                        )}
+                      </button>
+                    ) : (
+                      <button
+                        className="bg-sky-300 hover:bg-sky-200 font-semibold px-12 py-4 rounded-full shadow-lg flex items-center space-x-2 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        onClick={handlePayNowClick}
+                        disabled={isProcessingPayment}
+                      >
+                        {isProcessingPayment ? (
+                          <Loader2
+                            size={20}
+                            className="animate-spin text-[#222158]"
+                          />
+                        ) : (
+                          <>
+                            <span className="text-[#222158] font-semibold text-xl">
+                              PAY NOW
+                            </span>
+                            <ArrowUpRight
+                              size={20}
+                              className="text-[#222158] font-semibold text-xl"
+                            />
+                          </>
+                        )}
+                      </button>
+                    )}
                   </div>
                 </div>
+
                 {/* Right text */}
                 <div className="text-right flex-1">
                   <div className="text-[#222158] font-semibold text-xl">
@@ -769,6 +956,7 @@ const SearchPage = () => {
           </div>
         </section>
       </div>
+
       {/* Categories Section */}
       <section className="py-16 px-6 ml-4 font-figtree">
         <div className="max-w-7xl mx-auto">
@@ -790,7 +978,8 @@ const SearchPage = () => {
                 to unlock exclusive in-store benefits.
               </p>
             </div>
-            {/* Enhanced Navigation buttons */}
+
+            {/* Navigation buttons */}
             <div className="flex items-center space-x-4">
               <button
                 onClick={prevCategory}
@@ -808,6 +997,7 @@ const SearchPage = () => {
               </button>
             </div>
           </div>
+
           {/* Categories Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {currentCategories.map((category, index) => (
@@ -826,6 +1016,7 @@ const SearchPage = () => {
           </div>
         </div>
       </section>
+
       {/* How It Works Section */}
       <section className="py-16 px-6 ml-4 font-figtree" id="how-it-works">
         <div className="max-w-7xl mx-auto text-center">
@@ -842,12 +1033,13 @@ const SearchPage = () => {
           </h2>
 
           <StepIndicator
-            steps={howItWorksSteps}
+            steps={HOW_IT_WORKS_STEPS}
             currentStep={3}
             orientation="horizontal"
           />
         </div>
       </section>
+
       {/* Why Choose Section */}
       <div className="px-6 ml-4 mt-12 py-8">
         <section
@@ -870,6 +1062,7 @@ const SearchPage = () => {
               showAnimation={false}
             />
           </div>
+
           <div className="max-w-5xl mx-auto relative z-10">
             <h2
               className="text-3xl md:text-4xl font-bold mb-16 text-transparent bg-clip-text"
@@ -883,7 +1076,7 @@ const SearchPage = () => {
               Why Choose Pravasi Privilege Card?
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {features.map((feature, index) => (
+              {FEATURES.map((feature, index) => (
                 <FeatureCard
                   key={index}
                   icon={feature.icon}
@@ -896,6 +1089,7 @@ const SearchPage = () => {
           </div>
         </section>
       </div>
+
       {/* FAQ Section */}
       <div className="px-6 ml-4 mt-24 py-8" id="faq">
         <section className="py-16 px-6 bg-white font-figtree">
@@ -918,16 +1112,17 @@ const SearchPage = () => {
                   Here's what most users want to know before getting started.
                 </p>
               </div>
+
               {/* Right side - FAQ Items */}
               <div className="w-full">
-                <FAQ questions={faqData} />
+                <FAQ questions={FAQ_DATA} />
               </div>
             </div>
           </div>
         </section>
       </div>
 
-      {/* OTP Modal */}
+      {/* Modals */}
       <OTPModal
         isOpen={isOTPModalOpen}
         onClose={handleCloseOTPModal}
@@ -936,6 +1131,7 @@ const SearchPage = () => {
         userPhone={userData.phone}
         userName={userData.name}
       />
+
       {isSuccessModalOpen && (
         <DiscountCard
           isOpen={isSuccessModalOpen}

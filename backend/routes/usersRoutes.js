@@ -3,8 +3,8 @@ const { body, query, param } = require('express-validator');
 const UserController = require('../controllers/admin/userController');
 const AuthMiddleware = require('../middleware/userAuth');
 const ValidationMiddleware = require('../middleware/validation');
-const { PaymentController } = require('../controllers/admin/paymentController');
-const { RazorpayCallback } = require('../controllers/admin/raxorpaycallback')
+const { PaymentController } = require('../controllers/admin/PaymentController');
+const { RazorpayCallback } = require('../controllers/admin/raxorpaycallback');
 
 const router = express.Router();
 
@@ -57,8 +57,7 @@ router.post(
       .notEmpty()
       .withMessage('Email is required')
       .isEmail()
-      .withMessage('Please provide a valid email address')
-      .normalizeEmail(),
+      .withMessage('Please provide a valid email address'),
     body('phone')
       .notEmpty()
       .withMessage('Phone number is required')
@@ -579,7 +578,7 @@ router.post(
   '/payment',
   [
     AuthMiddleware.authenticate,
-    // AuthMiddleware.authorize('user'),
+    AuthMiddleware.authorize('user'),
     body('amount')
       .isInt({ min: 0 })
       .withMessage('Please provide a valid amount'),
@@ -591,13 +590,6 @@ router.post(
  * Razorpay callback (private route)
  * POST /api/users/razorpay/callback
  */
-router.post(
-  '/razorpay/callback',
-  [
-    AuthMiddleware.authenticate,
-    AuthMiddleware.authorize('user'),
-  ],
-  RazorpayCallback
-);
+router.post('/razorpay/callback', RazorpayCallback);
 
 module.exports = router;
