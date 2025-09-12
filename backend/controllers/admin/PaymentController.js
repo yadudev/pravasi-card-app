@@ -31,13 +31,13 @@ module.exports.PaymentController = async (req, res) => {
         });
 
         // Razorpay credentials
-        const key_id = process.env.RAZORPAY_TEST_KEY_ID;
-        const key_secret = process.env.RAZORPAY_TEST_KEY_SECRET;
+        // const key_id = process.env.RAZORPAY_TEST_KEY_ID;
+        // const key_secret = process.env.RAZORPAY_TEST_KEY_SECRET;
 
-        // const key_id = process.env.RAZORPAY_LIVE_KEY_ID;
-        // const key_secret = process.env.RAZORPAY_LIVE_KEY_SECRET;
+        const key_id = process.env.RAZORPAY_LIVE_KEY_ID;
+        const key_secret = process.env.RAZORPAY_LIVE_KEY_SECRET;
 
-        const callback_url = `http://localhost:5173/payment-callback?payment_id=${payment.id}`;
+        const callback_url = `https://pravasiprevilagecard.com/payment-callback?payment_id=${payment.id}`;
 
         const authHeader = {
             auth: {
